@@ -12,9 +12,22 @@ export const geminiModel = genAI.getGenerativeModel({ model: "models/gemini-2.5-
 /**
  * Streams chat responses from Gemini for a given prompt.
  * @param prompt - The user prompt to send to Gemini.
+ * @param systemPrompt - (Optional) System prompt to guide Gemini's response style.
  * @returns The streaming result from Gemini.
  */
-export async function streamChat(prompt: string) {
-  const result = await geminiModel.generateContentStream(prompt);
+export async function streamChat(prompt: string, systemPrompt?: string) {
+  // Compose the contents array for Gemini: systemPrompt as context, then user prompt
+  const contents = [];
+  if (systemPrompt) {
+    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+  } else {
+    // Default system prompt for chat responses
+    contents.push({
+      role: 'user',
+      parts: [{ text: 'You are a helpful AI assistant. Respond clearly and concisely. Keep replies under 260 characters unless more detail is needed.' }]
+    });
+  }
+  contents.push({ role: 'user', parts: [{ text: prompt }] });
+  const result = await geminiModel.generateContentStream({ contents });
   return result;
 }

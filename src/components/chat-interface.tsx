@@ -41,27 +41,91 @@ export function ChatInterface() {
     setIsRecording(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new window.MediaRecorder(stream);
+      const mediaRecorder = new window.MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       const audioChunks: BlobPart[] = [];
+      let silenceTimeout: ReturnType<typeof setTimeout> | null = null;
+      let maxDurationTimeout: ReturnType<typeof setTimeout>;
+
+      // --- Silence detection using AudioContext ---
+      // @ts-expect-error: webkitAudioContext is for legacy browser support
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.fftSize);
+      let silenceStart: number | null = null;
+      const SILENCE_THRESHOLD = 0.04; // Raise the floor for silence (0.0-1.0)
+      const SILENCE_DURATION = 2000; // ms
+      let silenceCheckRunning = true;
+      let stopped = false; // Prevent double stop
+
+      function checkSilence() {
+        if (!silenceCheckRunning) return;
+        analyser.getByteTimeDomainData(dataArray);
+        // Calculate RMS (root mean square) amplitude
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const normalized = (dataArray[i] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        if (rms < SILENCE_THRESHOLD) {
+          if (silenceStart === null) silenceStart = Date.now();
+          if (Date.now() - (silenceStart ?? 0) > SILENCE_DURATION) {
+            stopRecording();
+            return;
+          }
+        } else {
+          silenceStart = null;
+        }
+        requestAnimationFrame(checkSilence);
+      }
+      requestAnimationFrame(checkSilence);
+
+      const stopRecording = () => {
+        if (stopped) return;
+        stopped = true;
+        if (mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+        if (silenceTimeout) clearTimeout(silenceTimeout);
+        clearTimeout(maxDurationTimeout);
+        silenceCheckRunning = false;
+        // Only close if not already closed
+        if (audioContext.state !== 'closed') {
+          audioContext.close();
+        }
+      };
 
       mediaRecorder.addEventListener('dataavailable', (event: BlobEvent) => {
         audioChunks.push(event.data);
+        if (silenceTimeout) clearTimeout(silenceTimeout);
+        // Set a 2s silence timeout
+        silenceTimeout = setTimeout(() => {
+          stopRecording();
+        }, 2000);
       });
 
       mediaRecorder.addEventListener('stop', async () => {
+        // No need to trim trailing silence here; handled in Gemini system prompt
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        const wavBlob = await convertWebmToWav(audioBlob);
         const fileReader = new FileReader();
         fileReader.onloadend = async () => {
           const base64Audio = typeof fileReader.result === 'string' ? fileReader.result.split(',')[1] : undefined;
           if (!base64Audio) return;
-          // Stream transcription from Gemini
           setCurrentResponse('');
           setMessages(prev => [...prev, { content: '[Transcribing audio...]', isUser: true }]);
           const response = await fetch('/api/gemini-transcribe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audio: base64Audio, mimeType: 'audio/wav' })
+            body: JSON.stringify({
+              audio: base64Audio,
+              mimeType: 'audio/webm',
+              systemPrompt: 'If the audio contains a high-pitched tone or noise at the end, please ignore it and only transcribe the spoken content.'
+            })
           });
           if (!response.body) return;
           const streamReader = response.body.getReader();
@@ -82,101 +146,42 @@ export function ChatInterface() {
           setMessages(prev => {
             // Remove the placeholder
             const filtered = prev.filter(m => m.content !== '[Transcribing audio...]');
-            return [...filtered, { content: transcript, isUser: true }];
+            // Only add transcript if it is non-empty and not 'undefined'
+            if (transcript && transcript !== 'undefined') {
+              return [...filtered, { content: transcript, isUser: true }];
+            }
+            return filtered;
           });
           setCurrentResponse('');
           // Now send transcript to Gemini chat
           try {
+            setCurrentResponse('');
+            let aiResponse = '';
             const result = await streamChat(transcript);
             for await (const chunk of result.stream) {
               const chunkText = chunk.text();
-              setCurrentResponse(prev => prev + chunkText);
+              aiResponse += chunkText;
+              setCurrentResponse(aiResponse);
             }
-            setMessages(prev => [...prev, { content: currentResponse, isUser: false }]);
+            setMessages(prev => [...prev, { content: aiResponse, isUser: false }]);
             setCurrentResponse('');
           } catch {
             // ignore errors
           }
         };
-        fileReader.readAsDataURL(wavBlob);
+        fileReader.readAsDataURL(audioBlob);
       });
 
       mediaRecorder.start();
-      // Stop recording after 5 seconds for demo
-      setTimeout(() => {
-        mediaRecorder.stop();
-        stream.getTracks().forEach(track => track.stop());
-        setIsRecording(false);
-      }, 5000);
+      // Stop after 1 minute max
+      maxDurationTimeout = setTimeout(() => {
+        stopRecording();
+      }, 60000);
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Error accessing microphone:', error);
       setIsRecording(false);
     }
   };
-
-  /**
-   * Converts a WebM audio Blob to a WAV Blob using the browser AudioContext.
-   * @param webmBlob - The input WebM audio blob.
-   * @returns A Promise resolving to a WAV Blob.
-   */
-  async function convertWebmToWav(webmBlob: Blob): Promise<Blob> {
-    const arrayBuffer = await webmBlob.arrayBuffer();
-    // @ts-expect-error: webkitAudioContext is for legacy browser support
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    // Encode to WAV
-    const wavBuffer = encodeWAV(audioBuffer);
-    return new Blob([wavBuffer], { type: 'audio/wav' });
-  }
-
-  /**
-   * Encodes an AudioBuffer to a WAV ArrayBuffer (PCM 16-bit).
-   * @param audioBuffer - The input AudioBuffer.
-   * @returns WAV-encoded ArrayBuffer.
-   */
-  function encodeWAV(audioBuffer: AudioBuffer): ArrayBuffer {
-    const numChannels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
-    const format = 1; // PCM
-    const bitDepth = 16;
-    const samples = audioBuffer.length * numChannels;
-    const buffer = new ArrayBuffer(44 + samples * 2);
-    const view = new DataView(buffer);
-
-    // Write WAV header
-    function writeString(view: DataView, offset: number, str: string) {
-      for (let i = 0; i < str.length; i++) {
-        view.setUint8(offset + i, str.charCodeAt(i));
-      }
-    }
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + samples * 2, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numChannels * bitDepth / 8, true);
-    view.setUint16(32, numChannels * bitDepth / 8, true);
-    view.setUint16(34, bitDepth, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, samples * 2, true);
-
-    // Write PCM samples
-    let offset = 44;
-    for (let ch = 0; ch < numChannels; ch++) {
-      const channel = audioBuffer.getChannelData(ch);
-      for (let i = 0; i < channel.length; i++) {
-        let sample = Math.max(-1, Math.min(1, channel[i]));
-        sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-        view.setInt16(offset, sample, true);
-        offset += 2;
-      }
-    }
-    return buffer;
-  }
 
   return (
     <div className="flex flex-col h-[80vh] max-w-2xl mx-auto border rounded-lg">
