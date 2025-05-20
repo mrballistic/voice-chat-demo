@@ -24,7 +24,11 @@ export function ChatInterface() {
   const [isRecording, setIsRecording] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentResponse, setCurrentResponse] = useState('');
+  const [isVoiceStreaming, setIsVoiceStreaming] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -192,6 +196,170 @@ export function ChatInterface() {
     }
   };
 
+  // --- WebSocket Voice-to-Voice Integration ---
+  const startVoiceStreaming = async () => {
+    setIsVoiceStreaming(true);
+    setCurrentResponse('');
+    // Connect to local proxy
+    const ws = new window.WebSocket('ws://localhost:8080');
+    wsRef.current = ws;
+    if (!audioContextRef.current) audioContextRef.current = new window.AudioContext();
+    // Start microphone capture
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioCtx = new window.AudioContext({ sampleRate: 48000 });
+    const source = audioCtx.createMediaStreamSource(stream);
+
+    // Register AudioWorkletProcessor inline
+    const workletCode = `
+      class PCM16Worklet extends AudioWorkletProcessor {
+        constructor() {
+          super();
+          this._buffer = [];
+          this._inputSampleRate = 48000;
+          this._outputSampleRate = 16000;
+        }
+        process(inputs) {
+          const input = inputs[0][0];
+          if (!input) return true;
+          // Downsample
+          const downsampled = this.downsampleBuffer(input, this._inputSampleRate, this._outputSampleRate);
+          // Convert to PCM16
+          const pcm16 = this.floatTo16BitPCM(downsampled);
+          this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
+          return true;
+        }
+        downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
+          if (outputSampleRate === inputSampleRate) return buffer;
+          const sampleRateRatio = inputSampleRate / outputSampleRate;
+          const newLength = Math.round(buffer.length / sampleRateRatio);
+          const result = new Float32Array(newLength);
+          let offsetResult = 0;
+          let offsetBuffer = 0;
+          while (offsetResult < result.length) {
+            const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+            let accum = 0, count = 0;
+            for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+              accum += buffer[i];
+              count++;
+            }
+            result[offsetResult] = count > 0 ? accum / count : 0;
+            offsetResult++;
+            offsetBuffer = nextOffsetBuffer;
+          }
+          return result;
+        }
+        floatTo16BitPCM(input) {
+          const output = new Int16Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          return output;
+        }
+      }
+      registerProcessor('pcm16-worklet', PCM16Worklet);
+    `;
+    const blob = new Blob([workletCode], { type: 'application/javascript' });
+    const workletUrl = URL.createObjectURL(blob);
+    await audioCtx.audioWorklet.addModule(workletUrl);
+    const pcmNode = new window.AudioWorkletNode(audioCtx, 'pcm16-worklet');
+    source.connect(pcmNode);
+    pcmNode.connect(audioCtx.destination);
+    let recording = true;
+    const audioChunks: Int16Array[] = [];
+    pcmNode.port.onmessage = (event) => {
+      if (!recording || ws.readyState !== ws.OPEN) return;
+      // event.data is an ArrayBuffer of PCM16
+      // Convert to base64 and buffer for sending after stop
+      audioChunks.push(new Int16Array(event.data));
+    };
+    ws.onopen = () => {
+      // When user stops recording, send the full audio as base64 JSON
+      const stopStreaming = async () => {
+        recording = false;
+        stream.getTracks().forEach(track => track.stop());
+        pcmNode.disconnect();
+        source.disconnect();
+        audioCtx.close();
+        // Flatten and encode
+        const flat = new Int16Array(audioChunks.reduce((acc, arr) => acc + arr.length, 0));
+        let offset = 0;
+        for (const arr of audioChunks) {
+          flat.set(arr, offset);
+          offset += arr.length;
+        }
+        const audioBuffer = flat.buffer;
+        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+        ws.send(JSON.stringify({ audio: base64Audio }));
+      };
+      // For demo: stop after 5 seconds
+      setTimeout(stopStreaming, 5000);
+    };
+    ws.onmessage = async (event) => {
+      // Handle both string and Blob messages
+      if (typeof event.data === 'string') {
+        // Try to parse as JSON control message
+        try {
+          const msg = JSON.parse(event.data);
+          // Handle text deltas, etc.
+          if (msg.text) setCurrentResponse((prev) => prev + msg.text);
+          // You can add more control message handling here if needed
+        } catch {
+          // Not JSON, ignore
+        }
+      } else if (event.data instanceof Blob) {
+        // Peek at the first byte(s) to check if it's JSON or audio
+        const arrayBuffer = await event.data.arrayBuffer();
+        const firstByte = new Uint8Array(arrayBuffer, 0, 1)[0];
+        if (firstByte === 123) { // '{' character, likely JSON
+          try {
+            const text = new TextDecoder().decode(arrayBuffer);
+            const msg = JSON.parse(text);
+            // Handle JSON control message
+            if (msg.text) setCurrentResponse((prev) => prev + msg.text);
+            // You can add more control message handling here if needed
+            return;
+          } catch {
+            // Not valid JSON, fall through to audio
+          }
+        }
+        // Otherwise, treat as audio
+        const ctx = audioContextRef.current;
+        if (ctx) {
+          try {
+            const ab = arrayBuffer.slice(0);
+            const audioBuffer = await ctx.decodeAudioData(ab);
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            source.start();
+            audioSourceRef.current = source;
+          } catch (err) {
+            let firstBytes;
+            try {
+              firstBytes = new Uint8Array(arrayBuffer.slice(0, 32));
+            } catch {
+              firstBytes = '[ArrayBuffer detached]';
+            }
+            console.error('decodeAudioData error:', err, 'Blob size:', event.data.size, 'First bytes:', firstBytes);
+          }
+        }
+      }
+    };
+    ws.onclose = () => {
+      setIsVoiceStreaming(false);
+      setCurrentResponse('');
+      recording = false;
+      pcmNode.disconnect();
+      source.disconnect();
+      audioCtx.close();
+      if (audioSourceRef.current) audioSourceRef.current.stop();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
+  };
+
   return (
     <div className="flex flex-col h-[80vh] max-w-2xl mx-auto border rounded-lg">
       <div 
@@ -212,13 +380,21 @@ export function ChatInterface() {
           />
         )}
       </div>
-      <div className="border-t p-4">
+      <div className="border-t p-4 flex gap-2">
         <Button 
           onClick={startRecording}
-          disabled={isRecording}
+          disabled={isRecording || isVoiceStreaming}
           className="w-full"
         >
           {isRecording ? 'Listening...' : 'Press to Talk'}
+        </Button>
+        <Button
+          onClick={startVoiceStreaming}
+          disabled={isVoiceStreaming || isRecording}
+          className="w-full"
+          variant="secondary"
+        >
+          {isVoiceStreaming ? 'Streaming...' : 'Voice-to-Voice (Beta)'}
         </Button>
       </div>
     </div>

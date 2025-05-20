@@ -41,6 +41,22 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to view the app.
 
+## 🗣️ Real-Time Voice-to-Voice (WebSocket Proxy)
+
+To enable real-time voice-to-voice chat with OpenAI's GPT-4o Realtime API, run the local proxy server:
+
+```bash
+npm install ws
+node openai-realtime-proxy.js
+```
+
+This will start a WebSocket proxy on `ws://localhost:8080` that relays audio and control messages between your browser and OpenAI's realtime endpoint.
+
+- The frontend will connect to `ws://localhost:8080` for real-time streaming.
+- The proxy connects to `wss://api.openai.com/v1/realtime` using your API key.
+
+See `openai-realtime-proxy.js` for details.
+
 ## 🗂️ Project Structure
 - `src/components/ui/chat-bubble.tsx` – 💬 Chat bubble UI component
 - `src/components/chat-interface.tsx` – 🧠 Main chat interface logic
