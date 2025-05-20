@@ -44,7 +44,9 @@ export function ChatInterface() {
       const mediaRecorder = new window.MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       const audioChunks: BlobPart[] = [];
       let silenceTimeout: ReturnType<typeof setTimeout> | null = null;
-      let maxDurationTimeout: ReturnType<typeof setTimeout>;
+      const maxDurationTimeout: ReturnType<typeof setTimeout> = setTimeout(() => {
+        stopRecording();
+      }, 60000);
 
       // --- Silence detection using AudioContext ---
       // @ts-expect-error: webkitAudioContext is for legacy browser support
@@ -173,10 +175,6 @@ export function ChatInterface() {
       });
 
       mediaRecorder.start();
-      // Stop after 1 minute max
-      maxDurationTimeout = setTimeout(() => {
-        stopRecording();
-      }, 60000);
     } catch (error) {
       console.error('Error accessing microphone:', error);
       setIsRecording(false);
