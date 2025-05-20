@@ -380,22 +380,26 @@ export function ChatInterface() {
           />
         )}
       </div>
-      <div className="border-t p-4 flex gap-2">
-        <Button 
-          onClick={startRecording}
-          disabled={isRecording || isVoiceStreaming}
-          className="w-full"
-        >
-          {isRecording ? 'Listening...' : 'Press to Talk'}
-        </Button>
-        <Button
-          onClick={startVoiceStreaming}
-          disabled={isVoiceStreaming || isRecording}
-          className="w-full"
-          variant="secondary"
-        >
-          {isVoiceStreaming ? 'Streaming...' : 'Voice-to-Voice (Beta)'}
-        </Button>
+      <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
+        <div className="flex-1">
+          <Button 
+            onClick={startRecording}
+            disabled={isRecording || isVoiceStreaming}
+            className="w-full"
+          >
+            {isRecording ? 'Listening...' : 'Press to Talk'}
+          </Button>
+        </div>
+        <div className="flex-1">
+          <Button
+            onClick={startVoiceStreaming}
+            disabled={isVoiceStreaming || isRecording}
+            className="w-full"
+            variant="secondary"
+          >
+            {isVoiceStreaming ? 'Streaming...' : 'Voice-to-Voice (Beta)'}
+          </Button>
+        </div>
       </div>
     </div>
   );
