@@ -1,3 +1,8 @@
 # Product Context
 
-This project exists to demonstrate real-time conversational AI using voice. It solves the problem of integrating live voice input with a generative AI (Gemini) and presenting the interaction in a modern, user-friendly chat interface. The goal is to make the experience seamless, responsive, and visually appealing, with a focus on accessibility and usability.
+This app enables real-time, accessible voice chat with an AI assistant using OpenAI APIs. It solves the problem of seamless, accurate, and fast voice-to-text and AI chat in a modern web UI. The user experience is focused on:
+- Fast, accurate transcription (OpenAI Whisper)
+- Real-time, streaming AI chat (OpenAI GPT-4o)
+- Robust silence detection and error handling
+- Modern, accessible, and dark-mode-friendly UI
+- No Gemini or Google API dependencies

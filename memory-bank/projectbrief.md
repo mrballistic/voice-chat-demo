@@ -1,3 +1,12 @@
 # Project Brief
 
-Build a React-based frontend (Next.js) that enables real-time voice chat with the Gemini Voice API. The app should capture user voice, stream it to Gemini, and display the AI's responses as text in dynamically updating speech bubbles. The UI must use shadcn/ui components and Tailwind CSS. Maintain a clear conversation history and provide a polished, accessible user experience.
+This project is a real-time voice chat demo app built with Next.js, React, shadcn/ui, and Tailwind CSS. It uses OpenAI's Whisper API for real-time streaming transcription and OpenAI GPT-4o for chat completions. The app features robust silence detection, accessible and modern UI, and supports both light and dark mode. All Gemini-specific code has been removed in favor of OpenAI APIs.
+
+## Core Requirements and Goals
+
+- Real-time voice-to-text transcription using OpenAI Whisper
+- Real-time AI chat responses using OpenAI GPT-4o
+- Streaming UI for both transcription and chat
+- Robust silence detection and error handling
+- Accessible, visually polished, and dark mode support
+- No Gemini API dependencies

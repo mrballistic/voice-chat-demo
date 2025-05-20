@@ -1,16 +1,16 @@
 # Progress
 
-**What Works:**  
-- Next.js project scaffolded with shadcn/ui and Tailwind.
-- Chat UI and message streaming logic in place.
-- Gemini API utility functional for text prompts.
+**What works:**
+- Real-time voice capture and silence detection
+- Transcription via OpenAI Whisper API
+- Streaming chat completions via OpenAI GPT-4o
+- Modern, accessible UI with shadcn/ui and Tailwind CSS
+- Dark mode and error handling
 
-**What's Left:**  
-- Full voice recording and speech-to-text pipeline.
-- Real-time streaming of user voice to Gemini.
-- UI/UX polish, accessibility, and error handling.
+**What's left:**
+- (Optional) Add OpenAI TTS/voice streaming for AI replies
+- Further UI/UX polish and accessibility
+- Advanced error handling and user feedback
 
-**Known Issues:**  
-- Voice input is simulated, not live.
-- Speech-to-text integration is pending.
-- Streaming may need optimization for latency.
+**Known issues:**
+- No Gemini/Google code remains; all OpenAI endpoints are functional
