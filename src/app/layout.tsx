@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>Gemini AI Chat</title>
+        <title>OpenAI Chat</title>
       </head>
       <body
         className={

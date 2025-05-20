@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChatBubble } from '@/components/ui/chat-bubble';
+// import { streamChat } from '@/lib/openai';
 
 /**
  * Message object for chat history.
