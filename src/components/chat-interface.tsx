@@ -4,7 +4,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChatBubble } from '@/components/ui/chat-bubble';
-import { streamChat } from '@/lib/gemini';
 
 /**
  * Message object for chat history.
@@ -112,7 +111,7 @@ export function ChatInterface() {
       });
 
       mediaRecorder.addEventListener('stop', async () => {
-        // No need to trim trailing silence here; handled in Gemini system prompt
+        // No need to trim trailing silence here; handled in OpenAI Whisper
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         const fileReader = new FileReader();
         fileReader.onloadend = async () => {
@@ -120,50 +119,55 @@ export function ChatInterface() {
           if (!base64Audio) return;
           setCurrentResponse('');
           setMessages(prev => [...prev, { content: '[Transcribing audio...]', isUser: true }]);
-          const response = await fetch('/api/gemini-transcribe', {
+          // Use OpenAI Whisper endpoint
+          const response = await fetch('/api/openai-transcribe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               audio: base64Audio,
-              mimeType: 'audio/webm',
-              systemPrompt: 'If the audio contains a high-pitched tone or noise at the end, please ignore it and only transcribe the spoken content.'
+              mimeType: 'audio/webm'
             })
           });
-          if (!response.body) return;
-          const streamReader = response.body.getReader();
-          let transcript = '';
-          const decoder = new TextDecoder();
-          while (true) {
-            const { value, done } = await streamReader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            try {
-              const { transcript: chunkText } = JSON.parse(chunk);
-              transcript += chunkText;
-              setCurrentResponse(transcript);
-            } catch {
-              // ignore JSON parse errors
-            }
+          if (!response.ok) {
+            setMessages(prev => [...prev, { content: '[Transcription failed]', isUser: true }]);
+            setCurrentResponse('');
+            return;
           }
+          const data = await response.json();
+          const transcript = data.transcript;
           setMessages(prev => {
             // Remove the placeholder
             const filtered = prev.filter(m => m.content !== '[Transcribing audio...]');
-            // Only add transcript if it is non-empty and not 'undefined'
             if (transcript && transcript !== 'undefined') {
               return [...filtered, { content: transcript, isUser: true }];
             }
             return filtered;
           });
           setCurrentResponse('');
-          // Now send transcript to Gemini chat
+          // Now send transcript to OpenAI chat
           try {
             setCurrentResponse('');
             let aiResponse = '';
-            const result = await streamChat(transcript);
-            for await (const chunk of result.stream) {
-              const chunkText = chunk.text();
-              aiResponse += chunkText;
-              setCurrentResponse(aiResponse);
+            // Call the new OpenAI chat API route
+            const response = await fetch('/api/openai-chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transcript })
+            });
+            if (!response.body) return;
+            const streamReader = response.body.getReader();
+            const decoder = new TextDecoder();
+            while (true) {
+              const { value, done } = await streamReader.read();
+              if (done) break;
+              const chunk = decoder.decode(value);
+              try {
+                const { text } = JSON.parse(chunk);
+                aiResponse += text;
+                setCurrentResponse(aiResponse);
+              } catch {
+                // ignore JSON parse errors
+              }
             }
             setMessages(prev => [...prev, { content: aiResponse, isUser: false }]);
             setCurrentResponse('');

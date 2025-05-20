@@ -1,33 +1,37 @@
-// Gemini API utility for streaming chat and model access.
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// OpenAI API utility for streaming chat completions
+const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY || '';
 
 /**
- * Gemini model instance for chat and transcription.
- */
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
-const genAI = new GoogleGenerativeAI(apiKey);
-
-export const geminiModel = genAI.getGenerativeModel({ model: "models/gemini-2.5-flash-preview-05-20" });
-
-/**
- * Streams chat responses from Gemini for a given prompt.
- * @param prompt - The user prompt to send to Gemini.
- * @param systemPrompt - (Optional) System prompt to guide Gemini's response style.
- * @returns The streaming result from Gemini.
+ * Streams chat responses from OpenAI for a given prompt.
+ * @param prompt - The user prompt to send to OpenAI.
+ * @param systemPrompt - (Optional) System prompt to guide OpenAI's response style.
+ * @returns The streaming result from OpenAI.
  */
 export async function streamChat(prompt: string, systemPrompt?: string) {
-  // Compose the contents array for Gemini: systemPrompt as context, then user prompt
-  const contents = [];
+  const messages = [];
   if (systemPrompt) {
-    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+    messages.push({ role: 'system', content: systemPrompt });
   } else {
-    // Default system prompt for chat responses
-    contents.push({
-      role: 'user',
-      parts: [{ text: 'You are a helpful AI assistant. Respond clearly and concisely. Keep replies under 260 characters unless more detail is needed.' }]
-    });
+    messages.push({ role: 'system', content: 'You are a helpful AI assistant. Respond clearly and concisely. Keep replies under 260 characters unless more detail is needed.' });
   }
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
-  const result = await geminiModel.generateContentStream({ contents });
-  return result;
+  messages.push({ role: 'user', content: prompt });
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages,
+      stream: true,
+      max_tokens: 512
+    })
+  });
+  if (!response.ok || !response.body) {
+    throw new Error('OpenAI Chat API failed: ' + (await response.text()));
+  }
+  // Return the streaming response body for the frontend to process
+  return response.body;
 }
