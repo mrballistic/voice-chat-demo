@@ -1,9 +1,14 @@
+// API route for streaming real-time transcription from Gemini using audio input.
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
+/**
+ * POST handler for audio transcription.
+ * Accepts base64-encoded audio and streams transcription chunks as JSON.
+ */
 export async function POST(req: NextRequest) {
   try {
     const { audio, mimeType }: { audio: string; mimeType?: string } = await req.json();

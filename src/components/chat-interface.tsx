@@ -1,3 +1,4 @@
+// ChatInterface component manages the main chat UI, voice recording, transcription, and Gemini AI integration.
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -5,11 +6,20 @@ import { Button } from '@/components/ui/button';
 import { ChatBubble } from '@/components/ui/chat-bubble';
 import { streamChat } from '@/lib/gemini';
 
+/**
+ * Message object for chat history.
+ * @property content - The message text.
+ * @property isUser - Whether the message is from the user (true) or AI (false).
+ */
 interface Message {
   content: string;
   isUser: boolean;
 }
 
+/**
+ * Main chat interface for real-time voice chat with Gemini AI.
+ * Handles voice recording, streaming transcription, and chat display.
+ */
 export function ChatInterface() {
   const [isRecording, setIsRecording] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -23,6 +33,10 @@ export function ChatInterface() {
     }
   }, [messages, currentResponse]);
 
+  /**
+   * Starts voice recording, streams audio to Gemini for transcription,
+   * and sends the transcript to Gemini for a chat response.
+   */
   const startRecording = async (): Promise<void> => {
     setIsRecording(true);
     try {
@@ -101,7 +115,11 @@ export function ChatInterface() {
     }
   };
 
-  // Helper: Convert WebM to WAV using browser AudioContext
+  /**
+   * Converts a WebM audio Blob to a WAV Blob using the browser AudioContext.
+   * @param webmBlob - The input WebM audio blob.
+   * @returns A Promise resolving to a WAV Blob.
+   */
   async function convertWebmToWav(webmBlob: Blob): Promise<Blob> {
     const arrayBuffer = await webmBlob.arrayBuffer();
     // @ts-expect-error: webkitAudioContext is for legacy browser support
@@ -112,7 +130,11 @@ export function ChatInterface() {
     return new Blob([wavBuffer], { type: 'audio/wav' });
   }
 
-  // Helper: Encode AudioBuffer to WAV (PCM 16-bit)
+  /**
+   * Encodes an AudioBuffer to a WAV ArrayBuffer (PCM 16-bit).
+   * @param audioBuffer - The input AudioBuffer.
+   * @returns WAV-encoded ArrayBuffer.
+   */
   function encodeWAV(audioBuffer: AudioBuffer): ArrayBuffer {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
