@@ -198,6 +198,11 @@ export function ChatInterface() {
 
   // --- WebSocket Voice-to-Voice Integration ---
   const startVoiceStreaming = async () => {
+    // Interrupt AI playback if active
+    if (audioSourceRef.current) {
+      audioSourceRef.current.stop();
+      audioSourceRef.current = null;
+    }
     setIsVoiceStreaming(true);
     setCurrentResponse('');
     // Connect to local proxy
@@ -267,35 +272,44 @@ export function ChatInterface() {
     pcmNode.connect(audioCtx.destination);
     let recording = true;
     const audioChunks: Int16Array[] = [];
+    let stopStreamingTimeout: ReturnType<typeof setTimeout> | null = null;
+    const stopStreaming = async () => {
+      if (!recording) return;
+      recording = false;
+      stream.getTracks().forEach(track => track.stop());
+      pcmNode.disconnect();
+      source.disconnect();
+      audioCtx.close();
+      // Flatten and encode
+      const flat = new Int16Array(audioChunks.reduce((acc, arr) => acc + arr.length, 0));
+      let offset = 0;
+      for (const arr of audioChunks) {
+        flat.set(arr, offset);
+        offset += arr.length;
+      }
+      const audioBuffer = flat.buffer;
+      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+      ws.send(JSON.stringify({ audio: base64Audio }));
+    };
     pcmNode.port.onmessage = (event) => {
       if (!recording || ws.readyState !== ws.OPEN) return;
-      // event.data is an ArrayBuffer of PCM16
-      // Convert to base64 and buffer for sending after stop
       audioChunks.push(new Int16Array(event.data));
+      // Auto-stop after 5s or on silence (simple RMS threshold)
+      if (stopStreamingTimeout) clearTimeout(stopStreamingTimeout);
+      stopStreamingTimeout = setTimeout(stopStreaming, 2000); // 2s of silence
     };
     ws.onopen = () => {
-      // When user stops recording, send the full audio as base64 JSON
-      const stopStreaming = async () => {
-        recording = false;
-        stream.getTracks().forEach(track => track.stop());
-        pcmNode.disconnect();
-        source.disconnect();
-        audioCtx.close();
-        // Flatten and encode
-        const flat = new Int16Array(audioChunks.reduce((acc, arr) => acc + arr.length, 0));
-        let offset = 0;
-        for (const arr of audioChunks) {
-          flat.set(arr, offset);
-          offset += arr.length;
-        }
-        const audioBuffer = flat.buffer;
-        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
-        ws.send(JSON.stringify({ audio: base64Audio }));
-      };
-      // For demo: stop after 5 seconds
-      setTimeout(stopStreaming, 5000);
+      // Also stop after max 10s
+      setTimeout(stopStreaming, 10000);
     };
     ws.onmessage = async (event) => {
+      // If user starts talking, interrupt AI playback
+      if (isRecording) {
+        if (audioSourceRef.current) {
+          audioSourceRef.current.stop();
+          audioSourceRef.current = null;
+        }
+      }
       // Handle both string and Blob messages
       if (typeof event.data === 'string') {
         // Try to parse as JSON control message
@@ -327,13 +341,21 @@ export function ChatInterface() {
         const ctx = audioContextRef.current;
         if (ctx) {
           try {
+            // Interrupt user recording if AI audio starts
+            if (recording) {
+              recording = false;
+              stream.getTracks().forEach(track => track.stop());
+              pcmNode.disconnect();
+              source.disconnect();
+              audioCtx.close();
+            }
             const ab = arrayBuffer.slice(0);
             const audioBuffer = await ctx.decodeAudioData(ab);
-            const source = ctx.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(ctx.destination);
-            source.start();
-            audioSourceRef.current = source;
+            const sourceNode = ctx.createBufferSource();
+            sourceNode.buffer = audioBuffer;
+            sourceNode.connect(ctx.destination);
+            sourceNode.start();
+            audioSourceRef.current = sourceNode;
           } catch (err) {
             let firstBytes;
             try {
