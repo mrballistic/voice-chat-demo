@@ -30,29 +30,12 @@ export default function RootLayout({
       <body
         className={
           `${geistSans.variable} ${geistMono.variable} antialiased` +
-          (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? ' dark'
-            : '')
+          ' dark' // Always add dark class for hydration match
         }
         style={{ colorScheme: 'light dark' }}
       >
         {children}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (isDark) {
-                    document.body.classList.add('dark');
-                  } else {
-                    document.body.classList.remove('dark');
-                  }
-                } catch(e) {}
-              })();
-            `,
-          }}
-        />
+        {/* Remove the script that toggles dark mode at runtime to avoid hydration mismatch */}
       </body>
     </html>
   );

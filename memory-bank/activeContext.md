@@ -11,6 +11,7 @@
 - `/api/openai-transcribe` and `/api/openai-chat` endpoints implemented
 - Frontend updated to use OpenAI endpoints
 - Memory bank and documentation updated for OpenAI
+- Fixed streaming chat: NDJSON streaming from backend, frontend parses and updates UI in real time
 
 **Next Steps:**  
 - (Optional) Add OpenAI TTS/voice streaming for AI replies

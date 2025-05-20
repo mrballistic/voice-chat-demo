@@ -32,6 +32,35 @@ export async function streamChat(prompt: string, systemPrompt?: string) {
   if (!response.ok || !response.body) {
     throw new Error('OpenAI Chat API failed: ' + (await response.text()));
   }
-  // Return the streaming response body for the frontend to process
-  return response.body;
+  // Log the full response for debugging
+  console.log('OpenAI chat response headers:', response.headers);
+  // Log each chunk as text for debugging
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  async function* streamChunks() {
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunkText = decoder.decode(value);
+      console.log('OpenAI raw chunk:', chunkText); // Log raw SSE chunk
+      buffer += chunkText;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const data = line.replace('data: ', '').trim();
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            console.log('OpenAI chat chunk:', parsed); // Log parsed JSON chunk
+            yield parsed;
+          } catch (err) {
+            console.error('Failed to parse OpenAI chunk:', err, data);
+          }
+        }
+      }
+    }
+  }
+  return streamChunks();
 }

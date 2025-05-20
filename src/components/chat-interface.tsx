@@ -158,16 +158,22 @@ export function ChatInterface() {
             if (!response.body) return;
             const streamReader = response.body.getReader();
             const decoder = new TextDecoder();
+            let buffer = '';
             while (true) {
               const { value, done } = await streamReader.read();
               if (done) break;
-              const chunk = decoder.decode(value);
-              try {
-                const { text } = JSON.parse(chunk);
-                aiResponse += text;
-                setCurrentResponse(aiResponse);
-              } catch {
-                // ignore JSON parse errors
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                  const { text } = JSON.parse(line);
+                  aiResponse += text;
+                  setCurrentResponse(aiResponse);
+                } catch {
+                  // ignore JSON parse errors
+                }
               }
             }
             setMessages(prev => [...prev, { content: aiResponse, isUser: false }]);

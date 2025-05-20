@@ -63,19 +63,28 @@ export async function POST(req: NextRequest) {
               if (data === '[DONE]') continue;
               try {
                 const parsed = JSON.parse(data);
+                console.log('OpenAI chat chunk:', parsed); // Log parsed JSON chunk
                 const text = parsed.choices?.[0]?.delta?.content || '';
                 if (text) {
-                  controller.enqueue(encoder.encode(JSON.stringify({ text })));
+                  controller.enqueue(encoder.encode(JSON.stringify({ text }) + '\n'));
                 }
-              } catch {}
+              } catch (err) {
+                console.error('Failed to parse OpenAI chunk:', err, data);
+              }
             }
           }
         }
         controller.close();
       }
     });
+    // Use NDJSON for streaming JSON objects, which is easy to parse on the frontend
     return new Response(stream, {
-      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Transfer-Encoding': 'chunked',
+      }
     });
   } catch (err) {
     return NextResponse.json({ error: 'Chat completion failed', details: String(err) }, { status: 500 });

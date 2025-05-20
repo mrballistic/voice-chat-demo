@@ -3,7 +3,7 @@
 **What works:**
 - Real-time voice capture and silence detection
 - Transcription via OpenAI Whisper API
-- Streaming chat completions via OpenAI GPT-4o
+- Streaming chat completions via OpenAI GPT-4o (NDJSON, real-time UI updates)
 - Modern, accessible UI with shadcn/ui and Tailwind CSS
 - Dark mode and error handling
 
