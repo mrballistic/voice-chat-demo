@@ -1,22 +1,44 @@
-// openai-realtime-proxy.js
-// Node.js WebSocket proxy for OpenAI's real-time voice-to-voice API
-// Usage: node openai-realtime-proxy.js
+/**
+ * @file openai-realtime-proxy.js
+ * @description Node.js WebSocket proxy for OpenAI's real-time voice-to-voice (WebRTC) API.
+ *              Handles session creation, token management, and relays WebRTC signaling (SDP/ICE) between browser and OpenAI.
+ *              Usage: node openai-realtime-proxy.js
+ *
+ * @env OPENAI_API_KEY or NEXT_PUBLIC_OPENAI_API_KEY - OpenAI API key for authentication
+ * @env PORT - Port to run the proxy server (default: 8080)
+ *
+ * @see https://platform.openai.com/docs/guides/realtime#connect-with-webrtc
+ */
 
 import 'dotenv/config';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocketServer } from 'ws';
 import http from 'http';
 import axios from 'axios';
 
+/** OpenAI API key (from environment) */
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
+/** OpenAI model for realtime voice-to-voice */
 const OPENAI_MODEL = 'gpt-4o-realtime-preview-2025-02-01';
+/** Port for the local proxy server */
 const PORT = process.env.PORT || 8080;
 
 // --- WebRTC signaling support for OpenAI Realtime API with session token ---
-// This proxy now creates a session, obtains a token, and uses it for all WebRTC signaling requests.
+/**
+ * OpenAI session creation endpoint
+ * @type {string}
+ */
 const OPENAI_CREATE_SESSION_URL = 'https://api.openai.com/v1/realtime/sessions';
-// PATCH: Use session-specific WebRTC signaling URLs per OpenAI docs
+/**
+ * Returns the session-specific SDP offer endpoint for WebRTC signaling
+ * @param {string} sessionId - OpenAI session ID
+ * @returns {string} Endpoint URL
+ */
 const OPENAI_WEBRTC_SIGNAL_URL = (sessionId) => `https://api.openai.com/v1/realtime/sessions/${sessionId}/webrtc/sdp-offer`;
+/**
+ * Returns the session-specific ICE candidate endpoint for WebRTC signaling
+ * @param {string} sessionId - OpenAI session ID
+ * @returns {string} Endpoint URL
+ */
 const OPENAI_WEBRTC_ICE_URL = (sessionId) => `https://api.openai.com/v1/realtime/sessions/${sessionId}/webrtc/ice-candidate`;
 
 if (!OPENAI_API_KEY) {
@@ -24,9 +46,16 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
+/**
+ * Create and start the HTTP and WebSocket server for proxying WebRTC signaling.
+ */
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
 
+/**
+ * Handle new WebSocket client connections (browser frontend).
+ * For each client, manages OpenAI session and relays signaling messages.
+ */
 wss.on('connection', (clientWs) => {
   console.log('[Proxy] Client connected (WebRTC signaling mode)');
 
@@ -34,6 +63,10 @@ wss.on('connection', (clientWs) => {
   let openaiSessionId = null;
   let openaiSessionToken = null;
 
+  /**
+   * Handle incoming messages from the browser client (SDP offer/ICE).
+   * @param {Buffer|string} msg - Incoming message from client
+   */
   clientWs.on('message', async (msg) => {
     try {
       // Patch: handle Buffer or string
@@ -60,6 +93,10 @@ wss.on('connection', (clientWs) => {
           // Step 1: Create session if not already created
           if (!openaiSessionToken) {
             try {
+              /**
+               * Create a new OpenAI realtime session and obtain ephemeral token.
+               * @see https://platform.openai.com/docs/guides/realtime#connect-with-webrtc
+               */
               const sessionResp = await axios.post(
                 OPENAI_CREATE_SESSION_URL,
                 {
@@ -109,6 +146,9 @@ wss.on('connection', (clientWs) => {
           console.log('[PROXY] SDP offer POST body:', JSON.stringify(sdpOfferBody));
           try {
             console.log('[PROXY] Sending SDP offer POST to OpenAI...');
+            /**
+             * POST the browser's SDP offer to OpenAI and relay the answer back to the client.
+             */
             const resp = await axios.post(
               sdpOfferUrl,
               sdpOfferBody,
@@ -145,6 +185,9 @@ wss.on('connection', (clientWs) => {
             return;
           }
           try {
+            /**
+             * POST ICE candidate from browser to OpenAI for this session.
+             */
             await axios.post(
               OPENAI_WEBRTC_ICE_URL(openaiSessionId),
               { candidate: parsed.data.candidate },
@@ -168,6 +211,9 @@ wss.on('connection', (clientWs) => {
   });
 });
 
+/**
+ * Start the HTTP/WebSocket server.
+ */
 server.listen(PORT, () => {
   console.log(`OpenAI Realtime Proxy listening on ws://localhost:${PORT}`);
 });

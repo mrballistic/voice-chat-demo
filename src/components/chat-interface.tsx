@@ -26,8 +26,6 @@ export function ChatInterface() {
   const [isVoiceStreaming, setIsVoiceStreaming] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -301,6 +299,9 @@ export function ChatInterface() {
     let remoteAudio: HTMLAudioElement | null = null;
     let iceCandidatesQueue: RTCIceCandidateInit[] = [];
     let signalingReady = false;
+    // Hoist ctx and source so they are accessible in ws.onmessage and ws.onclose
+    let ctx: AudioContext | null = null;
+    let source: AudioBufferSourceNode | null = null;
 
     ws.onerror = (err) => {
       console.error('[TEST] WebSocket error:', err);
@@ -344,11 +345,11 @@ export function ChatInterface() {
       }
       const wavBuffer = pcm16ToWav(pcm16, 16000);
       // Decode to AudioBuffer
-      const ctx = new window.AudioContext();
+      ctx = new window.AudioContext();
       const audioBuffer = await ctx.decodeAudioData(wavBuffer);
       // Create a MediaStream from the AudioBuffer
       const dest = ctx.createMediaStreamDestination();
-      const source = ctx.createBufferSource();
+      source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(dest);
       // Start the source when the connection is ready
@@ -412,7 +413,7 @@ export function ChatInterface() {
             }
             iceCandidatesQueue = [];
             // Start playback of the test audio
-            source.start();
+            if (source) source.start();
           }
         }
       } catch {
@@ -428,7 +429,7 @@ export function ChatInterface() {
         remoteAudio.srcObject = null;
         remoteAudio.remove();
       }
-      ctx.close();
+      if (ctx) ctx.close();
     };
   };
 
