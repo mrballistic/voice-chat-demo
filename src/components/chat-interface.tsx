@@ -4,7 +4,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChatBubble } from '@/components/ui/chat-bubble';
-// import { streamChat } from '@/lib/openai';
 
 /**
  * Message object for chat history.
@@ -208,6 +207,19 @@ export function ChatInterface() {
     // Connect to local proxy
     const ws = new window.WebSocket('ws://localhost:8080');
     wsRef.current = ws;
+    // --- Ensure streaming button is always re-enabled on close ---
+    ws.onclose = () => {
+      setIsVoiceStreaming(false); // Always re-enable button immediately on close
+      setCurrentResponse('');
+      recording = false;
+      pcmNode.disconnect();
+      source.disconnect();
+      audioCtx.close();
+      if (audioSourceRef.current) audioSourceRef.current.stop();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
     if (!audioContextRef.current) audioContextRef.current = new window.AudioContext();
     // Start microphone capture
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -225,11 +237,29 @@ export function ChatInterface() {
         }
         process(inputs) {
           const input = inputs[0][0];
+          if (input && input.length > 0) {
+            let nonZero = false;
+            for (let i = 0; i < Math.min(8, input.length); i++) {
+              if (input[i] !== 0) nonZero = true;
+            }
+            if (!nonZero) {
+              console.log('[WORKLET] Input buffer is all zeros:', Array.from(input.slice(0, 8)));
+            } else {
+              console.log('[WORKLET] Input buffer sample:', Array.from(input.slice(0, 8)));
+            }
+          }
           if (!input) return true;
           // Downsample
-          const downsampled = this.downsampleBuffer(input, this._inputSampleRate, this._outputSampleRate);
+          let downsampled = this.downsampleBuffer(input, this._inputSampleRate, this._outputSampleRate);
+          // Apply gain to boost signal
+          const GAIN = 1; // Set to 1x to avoid clipping
+          downsampled = downsampled.map(x => x * GAIN);
+          // Log amplified buffer
+          console.log('[WORKLET] Amplified downsampled buffer sample:', Array.from(downsampled.slice(0, 8)));
           // Convert to PCM16
           const pcm16 = this.floatTo16BitPCM(downsampled);
+          // Log PCM16 buffer
+          console.log('[WORKLET] PCM16 buffer sample:', Array.from(pcm16.slice(0, 8)));
           this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
           return true;
         }
@@ -271,8 +301,23 @@ export function ChatInterface() {
     source.connect(pcmNode);
     pcmNode.connect(audioCtx.destination);
     let recording = true;
-    const audioChunks: Int16Array[] = [];
     let stopStreamingTimeout: ReturnType<typeof setTimeout> | null = null;
+    // Buffer for PCM16 audio chunks
+    const audioChunks: Int16Array[] = [];
+    // --- Cut off after 5 seconds ---
+    setTimeout(() => {
+      stopStreaming();
+    }, 1000);
+    function arrayBufferToBase64(buffer: ArrayBuffer): string {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return window.btoa(binary);
+    }
+    let pendingAudioBase64: string | null = null;
+    let pendingSystemPrompt: string | null = null;
     const stopStreaming = async () => {
       if (!recording) return;
       recording = false;
@@ -280,27 +325,76 @@ export function ChatInterface() {
       pcmNode.disconnect();
       source.disconnect();
       audioCtx.close();
-      // Flatten and encode
-      const flat = new Int16Array(audioChunks.reduce((acc, arr) => acc + arr.length, 0));
-      let offset = 0;
-      for (const arr of audioChunks) {
-        flat.set(arr, offset);
-        offset += arr.length;
+      // Filter out empty or all-zero chunks
+      const filteredChunks = audioChunks.filter(chunk => {
+        if (!chunk || chunk.length === 0) return false;
+        // Check if all values are zero
+        let allZero = true;
+        for (let i = 0; i < chunk.length; i++) {
+          if (chunk[i] !== 0) { allZero = false; break; }
+        }
+        return !allZero;
+      });
+      // Log chunk lengths and first 8 samples of each
+      filteredChunks.forEach((chunk, idx) => {
+        console.log(`[FRONTEND] Chunk #${idx} length:`, chunk.length, 'Sample:', Array.from(chunk.slice(0, 8)));
+      });
+      // Concatenate all PCM16 chunks (flatten to avoid buffer issues)
+      const flatPCM = filteredChunks.flatMap(chunk => Array.from(chunk));
+      // Trim leading and trailing zeros
+      let firstNonZero = 0;
+      let lastNonZero = flatPCM.length - 1;
+      while (firstNonZero < flatPCM.length && flatPCM[firstNonZero] === 0) firstNonZero++;
+      while (lastNonZero > firstNonZero && flatPCM[lastNonZero] === 0) lastNonZero--;
+      const trimmedPCM = flatPCM.slice(firstNonZero, lastNonZero + 1);
+      console.log('[FRONTEND] Flattened PCM16 type:', typeof flatPCM[0], 'Sample:', flatPCM.slice(0, 32));
+      console.log('[FRONTEND] First non-zero index:', firstNonZero, 'Last non-zero index:', lastNonZero, 'Trimmed length:', trimmedPCM.length);
+      // Explicitly copy values to Int16Array using set
+      const fullPCM = new Int16Array(trimmedPCM.length);
+      fullPCM.set(trimmedPCM);
+      // Log first 32 PCM16 values and sum for debugging
+      console.log('[FRONTEND] First 32 PCM16 values:', Array.from(fullPCM.slice(0, 32)), 'Sum:', fullPCM.reduce((a, b) => a + b, 0));
+      // Log PCM buffer length and duration
+      console.log('[FRONTEND] Trimmed PCM16 length:', fullPCM.length, 'Duration (s):', (fullPCM.length / 16000).toFixed(2));
+      const base64Audio = arrayBufferToBase64(fullPCM.buffer);
+      // Save for sending after session.created
+      pendingAudioBase64 = base64Audio;
+      pendingSystemPrompt = "You are a helpful assistant.";
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [
+              { type: 'input_audio', audio: pendingAudioBase64 }
+            ]
+          }
+        }));
+        ws.send(JSON.stringify({
+          type: 'response.create',
+          response: {
+            modalities: ['text', 'audio'],
+            instructions: pendingSystemPrompt,
+            previous_response_id: null
+          }
+        }));
+        pendingAudioBase64 = null;
+        pendingSystemPrompt = null;
       }
-      const audioBuffer = flat.buffer;
-      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
-      const systemPrompt = "You are an assistant that answers briefly and politely. Inject emotion into your voice. Act friendly.";
-      ws.send(JSON.stringify({ audio: base64Audio, systemPrompt }));
     };
     pcmNode.port.onmessage = (event) => {
       if (!recording || ws.readyState !== ws.OPEN) return;
-      audioChunks.push(new Int16Array(event.data));
-      // Auto-stop after 5s or on silence (simple RMS threshold)
+      const pcmChunk = new Int16Array(event.data);
+      // Log chunk length and first 8 values
+      console.log('[MAIN] Received PCM16 chunk length:', pcmChunk.length, 'sample:', Array.from(pcmChunk.slice(0, 8)));
+      audioChunks.push(pcmChunk);
+      // Auto-stop after 2s of silence
       if (stopStreamingTimeout) clearTimeout(stopStreamingTimeout);
-      stopStreamingTimeout = setTimeout(stopStreaming, 2000); // 2s of silence
+      stopStreamingTimeout = setTimeout(stopStreaming, 2000);
     };
     ws.onopen = () => {
-      // Also stop after max 10s
+      // No longer send response.create here; send after session.created
       setTimeout(stopStreaming, 10000);
     };
     ws.onmessage = async (event) => {
@@ -313,24 +407,50 @@ export function ChatInterface() {
       }
       // Handle both string and Blob messages
       if (typeof event.data === 'string') {
-        // Try to parse as JSON control message
         try {
           const msg = JSON.parse(event.data);
+          if (msg.type === 'session.created') {
+            // sessionReady = true; // No longer needed
+            // If audio is ready, send it now
+            if (pendingAudioBase64 && ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'conversation.item.create',
+                item: {
+                  type: 'message',
+                  role: 'user',
+                  content: [
+                    { type: 'input_audio', audio: pendingAudioBase64 }
+                  ]
+                }
+              }));
+              ws.send(JSON.stringify({
+                type: 'response.create',
+                response: {
+                  modalities: ['text', 'audio'],
+                  instructions: pendingSystemPrompt,
+                  previous_response_id: null
+                }
+              }));
+              pendingAudioBase64 = null;
+              pendingSystemPrompt = null;
+            }
+          }
           // Handle text deltas, etc.
           if (msg.text) setCurrentResponse((prev) => prev + msg.text);
-          // You can add more control message handling here if needed
+          // --- Re-enable streaming button on any OpenAI response ---
+          if (msg.type && msg.type.startsWith('response.')) {
+            setIsVoiceStreaming(false);
+          }
         } catch {
           // Not JSON, ignore
         }
       } else if (event.data instanceof Blob) {
-        // Peek at the first byte(s) to check if it's JSON or audio
         const arrayBuffer = await event.data.arrayBuffer();
         const firstByte = new Uint8Array(arrayBuffer, 0, 1)[0];
         if (firstByte === 123) { // '{' character, likely JSON
           try {
             const text = new TextDecoder().decode(arrayBuffer);
             const msg = JSON.parse(text);
-            // Handle JSON control message
             if (msg.text) setCurrentResponse((prev) => prev + msg.text);
             // You can add more control message handling here if needed
             return;
@@ -339,38 +459,58 @@ export function ChatInterface() {
           }
         }
         // Otherwise, treat as audio
-        const ctx = audioContextRef.current;
-        if (ctx) {
-          try {
-            // Interrupt user recording if AI audio starts
-            if (recording) {
-              recording = false;
-              stream.getTracks().forEach(track => track.stop());
-              pcmNode.disconnect();
-              source.disconnect();
-              audioCtx.close();
-            }
-            const ab = arrayBuffer.slice(0);
-            const audioBuffer = await ctx.decodeAudioData(ab);
-            const sourceNode = ctx.createBufferSource();
-            sourceNode.buffer = audioBuffer;
-            sourceNode.connect(ctx.destination);
-            sourceNode.start();
-            audioSourceRef.current = sourceNode;
-          } catch (err) {
-            let firstBytes;
-            try {
-              firstBytes = new Uint8Array(arrayBuffer.slice(0, 32));
-            } catch {
-              firstBytes = '[ArrayBuffer detached]';
-            }
-            console.error('decodeAudioData error:', err, 'Blob size:', event.data.size, 'First bytes:', firstBytes);
-          }
+        // Wrap PCM16 in WAV header for browser playback
+        function pcm16ToWav(pcm16: ArrayBuffer, sampleRate = 16000): ArrayBuffer {
+          const numChannels = 1;
+          const bytesPerSample = 2;
+          const blockAlign = numChannels * bytesPerSample;
+          const byteRate = sampleRate * blockAlign;
+          const wavBuffer = new ArrayBuffer(44 + pcm16.byteLength);
+          const view = new DataView(wavBuffer);
+          // RIFF identifier 'RIFF'
+          view.setUint32(0, 0x52494646, false);
+          // file length minus RIFF and size
+          view.setUint32(4, 36 + pcm16.byteLength, true);
+          // 'WAVE'
+          view.setUint32(8, 0x57415645, false);
+          // 'fmt ' chunk
+          view.setUint32(12, 0x666d7420, false);
+          view.setUint32(16, 16, true); // PCM chunk size
+          view.setUint16(20, 1, true); // PCM format
+          view.setUint16(22, numChannels, true);
+          view.setUint32(24, sampleRate, true);
+          view.setUint32(28, byteRate, true);
+          view.setUint16(32, blockAlign, true);
+          view.setUint16(34, 16, true); // bits per sample
+          // 'data' chunk
+          view.setUint32(36, 0x64617461, false);
+          view.setUint32(40, pcm16.byteLength, true);
+          // PCM16 samples
+          new Uint8Array(wavBuffer, 44).set(new Uint8Array(pcm16));
+          return wavBuffer;
+        }
+        // Log first 32 bytes of received buffer
+        console.log('[FRONTEND] Received binary audio, first 32 bytes:', Array.from(new Uint8Array(arrayBuffer.slice(0, 32))));
+        // Wrap and decode
+        const wavBuffer = pcm16ToWav(arrayBuffer, 16000);
+        const ctx = audioContextRef.current || new window.AudioContext();
+        if (!audioContextRef.current) audioContextRef.current = ctx;
+        try {
+          const audioBuffer = await ctx.decodeAudioData(wavBuffer);
+          const sourceNode = ctx.createBufferSource();
+          sourceNode.buffer = audioBuffer;
+          sourceNode.connect(ctx.destination);
+          sourceNode.start();
+          audioSourceRef.current = sourceNode;
+        } catch (err) {
+          let firstBytes;
+          try { firstBytes = new Uint8Array(arrayBuffer.slice(0, 32)); } catch { firstBytes = '[ArrayBuffer detached]'; }
+          console.error('decodeAudioData error:', err, 'Blob size:', event.data.size, 'First bytes:', firstBytes);
         }
       }
     };
     ws.onclose = () => {
-      setIsVoiceStreaming(false);
+      setIsVoiceStreaming(false); // Always re-enable button immediately on close
       setCurrentResponse('');
       recording = false;
       pcmNode.disconnect();
@@ -380,6 +520,109 @@ export function ChatInterface() {
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
+    };
+  };
+
+  // Remove: function generateTestPCM16Sine() { ... }
+  // Send known-good test audio to OpenAI
+  const sendTestAudio = async () => {
+    const ws = new window.WebSocket('ws://localhost:8080');
+    let pendingAudioBase64: string | null = null;
+    let pendingSystemPrompt: string | null = null;
+    // Load base64 PCM16 audio from test-4s.pcm16.b64.txt
+    const resp = await fetch('/test-4s.pcm16.b64.txt');
+    const base64Audio = (await resp.text()).trim();
+    ws.onopen = () => {
+      console.log('[TEST] Sending test PCM16 audio from file, length:', base64Audio.length);
+      pendingAudioBase64 = base64Audio;
+      pendingSystemPrompt = 'You are a helpful assistant.';
+      // Only send after session.created
+    };
+    ws.onmessage = async (event) => {
+      if (typeof event.data === 'string') {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'session.created') {
+            if (pendingAudioBase64 && ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'conversation.item.create',
+                item: {
+                  type: 'message',
+                  role: 'user',
+                  content: [
+                    { type: 'input_audio', audio: pendingAudioBase64 }
+                  ]
+                }
+              }));
+              ws.send(JSON.stringify({
+                type: 'response.create',
+                response: {
+                  modalities: ['text', 'audio'],
+                  instructions: pendingSystemPrompt,
+                  previous_response_id: null
+                }
+              }));
+              pendingAudioBase64 = null;
+              pendingSystemPrompt = null;
+            }
+          }
+          if (msg.text) setCurrentResponse((prev) => prev + msg.text);
+        } catch {}
+      } else if (event.data instanceof Blob) {
+        const arrayBuffer = await event.data.arrayBuffer();
+        // Wrap PCM16 in WAV header for browser playback
+        function pcm16ToWav(pcm16: ArrayBuffer, sampleRate = 16000): ArrayBuffer {
+          const numChannels = 1;
+          const bytesPerSample = 2;
+          const blockAlign = numChannels * bytesPerSample;
+          const byteRate = sampleRate * blockAlign;
+          const wavBuffer = new ArrayBuffer(44 + pcm16.byteLength);
+          const view = new DataView(wavBuffer);
+          // RIFF identifier 'RIFF'
+          view.setUint32(0, 0x52494646, false);
+          // file length minus RIFF and size
+          view.setUint32(4, 36 + pcm16.byteLength, true);
+          // 'WAVE'
+          view.setUint32(8, 0x57415645, false);
+          // 'fmt ' chunk
+          view.setUint32(12, 0x666d7420, false);
+          view.setUint32(16, 16, true); // PCM chunk size
+          view.setUint16(20, 1, true); // PCM format
+          view.setUint16(22, numChannels, true);
+          view.setUint32(24, sampleRate, true);
+          view.setUint32(28, byteRate, true);
+          view.setUint16(32, blockAlign, true);
+          view.setUint16(34, 16, true); // bits per sample
+          // 'data' chunk
+          view.setUint32(36, 0x64617461, false);
+          view.setUint32(40, pcm16.byteLength, true);
+          // PCM16 samples
+          new Uint8Array(wavBuffer, 44).set(new Uint8Array(pcm16));
+          return wavBuffer;
+        }
+        // Log first 32 bytes of received buffer
+        console.log('[FRONTEND] Received binary audio, first 32 bytes:', Array.from(new Uint8Array(arrayBuffer.slice(0, 32))));
+        // Wrap and decode
+        const wavBuffer = pcm16ToWav(arrayBuffer, 16000);
+        const ctx = audioContextRef.current || new window.AudioContext();
+        if (!audioContextRef.current) audioContextRef.current = ctx;
+        try {
+          const audioBuffer = await ctx.decodeAudioData(wavBuffer);
+          const sourceNode = ctx.createBufferSource();
+          sourceNode.buffer = audioBuffer;
+          sourceNode.connect(ctx.destination);
+          sourceNode.start();
+          audioSourceRef.current = sourceNode;
+        } catch (err) {
+          let firstBytes;
+          try { firstBytes = new Uint8Array(arrayBuffer.slice(0, 32)); } catch { firstBytes = '[ArrayBuffer detached]'; }
+          console.error('decodeAudioData error:', err, 'Blob size:', event.data.size, 'First bytes:', firstBytes);
+        }
+      }
+    };
+    ws.onclose = () => {
+      setIsVoiceStreaming(false);
+      setCurrentResponse('');
     };
   };
 
@@ -421,6 +664,15 @@ export function ChatInterface() {
             variant="secondary"
           >
             {isVoiceStreaming ? 'Streaming...' : 'Voice-to-Voice (Beta)'}
+          </Button>
+        </div>
+        <div className="flex-1">
+          <Button
+            onClick={sendTestAudio}
+            className="w-full"
+            variant="outline"
+          >
+            Send Test Audio
           </Button>
         </div>
       </div>

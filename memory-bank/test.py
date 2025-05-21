@@ -64,6 +64,7 @@ def record_until_enter() -> bytes:
     return b"".join(frames)
 
 def play_pcm16(raw: bytes):
+    print(f"[DEBUG] Playing PCM16 audio, {len(raw)} bytes")
     pa     = pyaudio.PyAudio()
     stream = pa.open(format=pa.get_format_from_width(WIDTH),
                      channels=CHANNELS, rate=RATE, output=True)
@@ -80,7 +81,11 @@ async def one_voice_turn():
     audio_b64 = base64.b64encode(pcm).decode()
 
     # 2) stream it to Realtime
-    async with websockets.connect(REALTIME_WS, extra_headers=HEADERS) as ws:
+    extra_headers = [
+        ("Authorization", f"Bearer {os.environ['OPENAI_API_KEY']}"),
+        ("OpenAI-Beta", "realtime=v1")
+    ]
+    async with websockets.connect(REALTIME_WS, extra_headers=extra_headers) as ws:
         # conversation.item.create  (user audio message)
         await ws.send(json.dumps({
             "type": "conversation.item.create",
@@ -135,4 +140,3 @@ async def main():
 if __name__ == "__main__":
     openai.api_key = os.environ["OPENAI_API_KEY"]
     asyncio.run(main())
- 
