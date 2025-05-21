@@ -289,7 +289,8 @@ export function ChatInterface() {
       }
       const audioBuffer = flat.buffer;
       const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
-      ws.send(JSON.stringify({ audio: base64Audio }));
+      const systemPrompt = "You are an assistant that answers briefly and politely. Inject emotion into your voice. Act friendly.";
+      ws.send(JSON.stringify({ audio: base64Audio, systemPrompt }));
     };
     pcmNode.port.onmessage = (event) => {
       if (!recording || ws.readyState !== ws.OPEN) return;
