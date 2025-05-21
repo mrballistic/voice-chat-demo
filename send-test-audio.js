@@ -2,8 +2,8 @@
 // Usage: node send-test-audio.js [base64file]
 // Connects to local OpenAI proxy, waits for session.created, sends test audio, and logs responses.
 
-const fs = require('fs');
-const WebSocket = require('ws');
+import fs from 'fs';
+import WebSocket from 'ws';
 
 const BASE64_FILE = process.argv[2] || 'test-4s.pcm16.b64.txt';
 const PROXY_URL = 'ws://localhost:8080';
@@ -12,7 +12,6 @@ const audioBase64 = fs.readFileSync(BASE64_FILE, 'utf8').trim();
 
 const ws = new WebSocket(PROXY_URL);
 
-let sessionReady = false;
 
 ws.on('open', () => {
   console.log('[Test] Connected to proxy');

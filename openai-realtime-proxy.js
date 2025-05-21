@@ -19,7 +19,7 @@ if (!OPENAI_API_KEY) {
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (clientWs, req) => {
+wss.on('connection', (clientWs) => {
   console.log('[Proxy] Client connected');
   // Connect to OpenAI's realtime endpoint
   const openaiWs = new WebSocket(`${OPENAI_REALTIME_URL}?model=${OPENAI_MODEL}`, {
