@@ -41,8 +41,8 @@ export function ChatBubble({ content, isUser, className }: ChatBubbleProps) {
         className={
           'absolute ' +
           (isUser
-            ? 'right-[-8px] bottom-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-l-8 border-l-primary'
-            : 'left-[-8px] bottom-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-r-8 border-r-muted')
+            ? 'right-[-6px] top-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-l-8 border-l-primary'
+            : 'left-[-6px] top-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-r-8 border-r-muted')
         }
         aria-hidden="true"
       />
