@@ -25,8 +25,10 @@ export function ChatBubble({ content, isUser, className }: ChatBubbleProps) {
   return (
     <div
       className={cn(
-        'max-w-[80%] rounded-lg p-4 mb-2',
-        isUser ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted mr-auto',
+        'max-w-[80%] relative p-4 mb-2',
+        isUser
+          ? 'bg-primary text-primary-foreground ml-auto rounded-2xl'
+          : 'bg-muted mr-auto rounded-2xl',
         className
       )}
       aria-live="polite"
@@ -34,6 +36,16 @@ export function ChatBubble({ content, isUser, className }: ChatBubbleProps) {
       role="region"
     >
       <p className="break-words whitespace-pre-line">{content}</p>
+      {/* Custom CSS triangle tail for speech balloon, flush with edge and bottom */}
+      <span
+        className={
+          'absolute ' +
+          (isUser
+            ? 'right-[-8px] bottom-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-l-8 border-l-primary'
+            : 'left-[-8px] bottom-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-r-8 border-r-muted')
+        }
+        aria-hidden="true"
+      />
     </div>
   );
 }

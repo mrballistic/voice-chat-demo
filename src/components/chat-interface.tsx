@@ -626,6 +626,7 @@ export function ChatInterface() {
     };
   };
 
+  // Add avatar circle with emoji before the chat bubble
   return (
     <div className="flex flex-col h-[80vh] max-w-2xl mx-auto border rounded-lg">
       <div 
@@ -633,17 +634,47 @@ export function ChatInterface() {
         className="flex-1 overflow-y-auto p-4 space-y-4"
       >
         {messages.map((message, index) => (
-          <ChatBubble 
-            key={index}
-            content={message.content}
-            isUser={message.isUser}
-          />
+          message.isUser ? (
+            <div key={index} className="flex items-start gap-2 justify-end">
+              <ChatBubble 
+                content={message.content}
+                isUser={message.isUser}
+              />
+              <div
+                className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: '#bbb' }}
+              >
+                🧔
+              </div>
+            </div>
+          ) : (
+            <div key={index} className="flex items-start gap-2">
+              <div
+                className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: '#bbb' }}
+              >
+                🤖
+              </div>
+              <ChatBubble 
+                content={message.content}
+                isUser={message.isUser}
+              />
+            </div>
+          )
         ))}
         {currentResponse && (
-          <ChatBubble 
-            content={currentResponse}
-            isUser={false}
-          />
+          <div className="flex items-start gap-2">
+            <div
+              className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: '#bbb' }}
+            >
+              {'🤖'}
+            </div>
+            <ChatBubble 
+              content={currentResponse}
+              isUser={false}
+            />
+          </div>
         )}
       </div>
       <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
