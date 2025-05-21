@@ -36,7 +36,7 @@ export function ChatBubble({ content, isUser, className }: ChatBubbleProps) {
       role="region"
     >
       <p className="break-words whitespace-pre-line">{content}</p>
-      {/* Custom CSS triangle tail for speech balloon, flush with edge and bottom */}
+      {/* Custom CSS triangle tail for speech balloon, flush with edge and near top */}
       <span
         className={
           'absolute ' +

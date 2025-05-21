@@ -441,6 +441,17 @@ export function ChatInterface() {
           if (msg.type && msg.type.startsWith('response.')) {
             setIsVoiceStreaming(false);
           }
+          // --- Handle transcription in voice-to-voice mode ---
+          if (msg.type === 'response.text.delta' && msg.delta) {
+            // Show transcript as a user message (like press-to-talk)
+            setMessages(prev => {
+              // Only add if last message is not the same transcript
+              if (prev.length > 0 && prev[prev.length - 1].content === msg.delta && prev[prev.length - 1].isUser) {
+                return prev;
+              }
+              return [...prev, { content: msg.delta, isUser: true }];
+            });
+          }
         } catch {
           // Not JSON, ignore
         }
@@ -642,7 +653,7 @@ export function ChatInterface() {
               />
               <div
                 className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: '#bbb' }}
+                style={{ background: '#333' }}
               >
                 🧔
               </div>
@@ -651,7 +662,7 @@ export function ChatInterface() {
             <div key={index} className="flex items-start gap-2">
               <div
                 className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: '#bbb' }}
+                style={{ background: '#333' }}
               >
                 🤖
               </div>
@@ -666,7 +677,7 @@ export function ChatInterface() {
           <div className="flex items-start gap-2">
             <div
               className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: '#bbb' }}
+              style={{ background: '#333' }}
             >
               {'🤖'}
             </div>
