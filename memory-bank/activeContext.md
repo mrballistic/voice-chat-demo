@@ -22,6 +22,9 @@
 - Keep memory bank and README in sync with architecture and workflow changes.
 - Fixed: No more decodeAudioData errors, robust message handling in frontend
 
+### Security
+- **Never leak secrets to github.** Secrets include internal URLs, endpoints, and API keys. Always use environment variables for sensitive configuration.
+
 **Next Steps:**  
 - Further UI/UX polish and accessibility
 - Advanced error handling and user feedback
