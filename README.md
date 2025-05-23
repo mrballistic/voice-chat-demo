@@ -1,74 +1,105 @@
-# 🎤 Voice Chat Demo with OpenAI API 🤖
+# 🎤 Real-Time Voice Chat Demo (OpenAI GPT-4o + Whisper)
 
-A real-time voice chat demo built with Next.js, React, shadcn/ui, and Tailwind CSS. This app captures user voice, streams it to the OpenAI Whisper API for transcription, and displays AI responses from OpenAI GPT-4o as text in chat bubbles. It also supports real-time voice-to-voice chat using OpenAI's GPT-4o Realtime API.
+A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Tailwind CSS. This app streams user voice to OpenAI Whisper for transcription and uses OpenAI GPT-4o Realtime API for voice-to-voice AI chat. No local proxy or mode switching required.
+
+## ⚠️ Requirements
+
+- **Next.js**: 15.1.8 (LTS)
+- **React**: 19.1.0 (LTS)
+- **Node.js**: 18+ recommended
 
 ## ✨ Features
+
 - 🎙️ Real-time voice input (Web Audio API)
-- 🔄 Streaming AI responses from OpenAI GPT-4o (text and voice)
-- 🗣️ Real-time voice-to-voice chat with OpenAI GPT-4o Realtime API
-- 💎 Modern UI with shadcn/ui and Tailwind CSS
-- 💬 Conversation history in chat bubbles
-- ♿ Accessible and responsive design
+- 🗣️ Voice-to-voice chat with OpenAI GPT-4o Realtime API (via Azure session backend)
+- 📝 User transcription with OpenAI Whisper (runs in parallel, user bubble shown as soon as you finish speaking)
+- 💬 AI responses (text or transcript) shown as robot chat bubbles
+- 💎 Modern, accessible UI (shadcn/ui, Tailwind CSS)
+- 📱 Responsive, fixed-width chat area for stable layout
+- 🔥 Single "Voice Chat" toggle button (orange/red), no mode switching, no WebRTC jargon
 
 ## 🛠️ Tech Stack
-- **Framework:** Next.js (React, TypeScript)
+
+- **Framework:** Next.js 15.1.8 (React 19.1.0, TypeScript)
 - **UI:** shadcn/ui, Tailwind CSS
-- **API:** OpenAI Whisper (speech-to-text), OpenAI GPT-4o (chat completions & realtime voice)
-- **Voice:** Web Audio API, AudioWorklet, MediaRecorder
+- **API:** OpenAI Whisper (speech-to-text), OpenAI GPT-4o Realtime (voice-to-voice)
+- **Voice:** Web Audio API, MediaRecorder
 
 ## 🚀 Getting Started
 
-### 1. 🧑‍💻 Clone the repository
-```bash
-git clone <your-repo-url>
-cd voice-chat-demo
-```
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd voice-chat-demo
+   ```
 
-### 2. 📦 Install dependencies
-```bash
-npm install
-```
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-### 3. 🔑 Configure Environment Variables
-Create a `.env.local` file in the project root:
-```
-NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
-```
+3. **Configure Environment Variables**
+   Create a `.env.local` file in the project root:
+   ```
+   NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+   NEXT_PUBLIC_SESSION_URL=https://your-azure-backend/session
+   NEXT_PUBLIC_OPENAI_REALTIME_URL=https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
+   ```
 
-### 4. ▶️ Run the development server
-```bash
-npm run dev
-```
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
 
 Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-## 🗣️ Real-Time Voice-to-Voice (WebSocket Proxy)
+## 🏗️ Static Export
 
-To enable real-time voice-to-voice chat with OpenAI's GPT-4o Realtime API, run the local proxy server:
+To generate a static export (for deployment to static hosting):
 
 ```bash
-npm install ws
-node openai-realtime-proxy.js
+npm run build
 ```
 
-This will start a WebSocket proxy on `ws://localhost:8080` that relays audio and control messages between your browser and OpenAI's realtime endpoint.
-
-- The frontend connects to `ws://localhost:8080` for real-time streaming.
-- The proxy connects to `wss://api.openai.com/v1/realtime` using your API key.
-- The proxy relays `response.audio.delta` as binary audio to the frontend, all other messages as JSON.
-- The frontend streams user PCM16 audio (base64-encoded) to the proxy, and plays back AI-generated audio in real time.
-
-See `openai-realtime-proxy.js` for details.
+The static site will be output to the `out/` directory.  
+No need to run `next export`—Next.js handles static export automatically with `output: 'export'` in `next.config.ts`.
 
 ## 🗂️ Project Structure
-- `src/components/ui/chat-bubble.tsx` – 💬 Chat bubble UI component
-- `src/components/chat-interface.tsx` – 🧠 Main chat interface logic (voice-to-voice and REST flows)
-- `src/lib/openai.ts` – 🔗 OpenAI API utility
-- `src/lib/utils.ts` – 🛠️ Utility functions
-- `src/app/api/openai-transcribe/route.ts` – 🎤 Whisper API endpoint
-- `src/app/api/openai-chat/route.ts` – 🤖 Chat completions endpoint
-- `openai-realtime-proxy.js` – 🗣️ Node.js WebSocket proxy for OpenAI realtime API
-- `memory-bank/` – 🗃️ Project documentation and context
+
+- `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, Whisper, UI)
+- `src/components/ui/chat-bubble.tsx` – Chat bubble UI component
+- `src/lib/openai.ts` – OpenAI API utility
+- `src/app/api/openai-transcribe/route.ts` – Whisper API endpoint
+- `src/app/api/openai-chat/route.ts` – Chat completions endpoint
+- `memory-bank/` – Project documentation and context
+
+## 📝 How It Works
+
+- When you start a voice chat, your audio is streamed to the Azure backend for session management and OpenAI Realtime API for AI voice response.
+- At the same time, your audio is buffered and sent to OpenAI Whisper for transcription as soon as you finish speaking. The transcript is shown as a user chat bubble.
+- The AI's response (text or transcript) is shown as a robot chat bubble, with no duplicates.
+- The UI is stable, accessible, and mobile-friendly.
+
+## 🗺️ Architecture
+
+```mermaid
+flowchart TD
+    subgraph Browser
+      A[User Mic/Audio] -->|stream| B[Chat Interface (React)]
+      B -->|buffered audio| C[Whisper API<br>(/api/openai-transcribe)]
+      C -->|user transcript| D[User Chat Bubble]
+      B -->|stream| E[Azure Session Backend<br>($SESSION_URL)]
+      E -->|ephemeral token| F[OpenAI Realtime API<br>($OPENAI_REALTIME_URL)]
+      F -->|AI response| G[Robot Chat Bubble]
+    end
+    style B fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style D fill:#e0f7fa,stroke:#333,stroke-width:1px
+    style G fill:#ffe0b2,stroke:#333,stroke-width:1px
+```
+
+- All backend URLs are set via environment variables.
+- No local proxy or mode switching.
 
 ## 📄 License
-This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+MIT License. See [LICENSE](./LICENSE) for details.

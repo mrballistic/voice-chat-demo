@@ -1,11 +1,36 @@
-// OpenAI API utility for streaming chat completions
+/**
+ * OpenAI API utility for streaming chat completions.
+ * Handles authentication via NEXT_PUBLIC_OPENAI_API_KEY environment variable.
+ */
 const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY || '';
 
 /**
- * Streams chat responses from OpenAI for a given prompt.
+ * Type representing a chunk of OpenAI chat completion response.
+ * Adjust fields as needed to match actual API response.
+ */
+export interface OpenAIChatCompletionChunk {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    delta: {
+      content?: string;
+      role?: string;
+      function_call?: unknown;
+      tool_calls?: unknown;
+    };
+    index: number;
+    finish_reason: string | null;
+  }>;
+}
+
+/**
+ * Streams chat responses from OpenAI for a given prompt using Server-Sent Events (SSE).
  * @param prompt - The user prompt to send to OpenAI.
  * @param systemPrompt - (Optional) System prompt to guide OpenAI's response style.
- * @returns The streaming result from OpenAI.
+ * @returns An async generator yielding parsed OpenAI chat completion chunks.
+ * @throws Error if the OpenAI API call fails.
  */
 export async function streamChat(prompt: string, systemPrompt?: string) {
   const messages = [];
@@ -19,16 +44,16 @@ export async function streamChat(prompt: string, systemPrompt?: string) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model: 'gpt-3.5-turbo',
       messages,
       stream: true,
-      max_tokens: 512
-    })
+    }),
   });
+
   if (!response.ok || !response.body) {
     throw new Error('OpenAI Chat API failed: ' + (await response.text()));
   }
@@ -37,7 +62,11 @@ export async function streamChat(prompt: string, systemPrompt?: string) {
   // Log each chunk as text for debugging
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  async function* streamChunks() {
+  /**
+   * Async generator yielding parsed OpenAI chat completion chunks from the SSE stream.
+   * Each yielded value is a parsed JSON chunk from the OpenAI API.
+   */
+  async function* streamChunks(): AsyncGenerator<OpenAIChatCompletionChunk, void, unknown> {
     let buffer = '';
     while (true) {
       const { value, done } = await reader.read();
