@@ -9,10 +9,17 @@ import { ChatBubble } from '@/components/ui/chat-bubble';
  * Message object for chat history.
  * @property content - The message text.
  * @property isUser - Whether the message is from the user (true) or AI (false).
+ * @property id - Optional unique identifier
+/**
+ * Message object for chat history.
+ * @property content - The message text.
+ * @property isUser - Whether the message is from the user (true) or AI (false).
+ * @property id - Optional unique identifier for tracking/updating messages.
  */
 interface Message {
   content: string;
   isUser: boolean;
+  id?: string;
 }
 
 /**
@@ -25,6 +32,10 @@ export function ChatInterface() {
   const [isVoiceStreaming, setIsVoiceStreaming] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Refs for cleanup
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -34,13 +45,38 @@ export function ChatInterface() {
   }, [messages, currentResponse]);
 
   // --- WebRTC Voice-to-Voice Integration (OpenAI Realtime) ---
+
+  // Cleanup function to stop all WebRTC/media resources
+  const stopVoiceStreaming = () => {
+    setIsVoiceStreaming(false);
+    setCurrentResponse('');
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    // Stop local stream
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    // Stop media recorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+  };
+
   const startVoiceStreamingWebRTC = async () => {
+    // Always clean up before starting a new session
+    stopVoiceStreaming();
     setIsVoiceStreaming(true);
     setCurrentResponse('');
     let peerConnection: RTCPeerConnection | null = null;
     let remoteAudio: HTMLAudioElement | null = null;
     let localStream: MediaStream | null = null;
     let dataChannel: RTCDataChannel | null = null;
+    let mediaRecorder: MediaRecorder | null = null;
 
     try {
       // 1. Get ephemeral token from Azure session endpoint
@@ -57,23 +93,38 @@ export function ChatInterface() {
           { urls: 'stun:stun.l.google.com:19302' },
         ],
       });
+      peerConnectionRef.current = peerConnection;
 
       // 3. Add audio track and buffer for Whisper transcription
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = localStream;
       for (const track of localStream.getTracks()) {
         peerConnection.addTrack(track, localStream);
       }
       // Buffer audio for Whisper
       const audioChunks: BlobPart[] = [];
-      const mediaRecorder = new window.MediaRecorder(localStream, { mimeType: 'audio/webm;codecs=opus' });
+      mediaRecorder = new window.MediaRecorder(localStream, { mimeType: 'audio/webm;codecs=opus' });
+      mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.ondataavailable = (event: BlobEvent) => {
         audioChunks.push(event.data);
       };
       mediaRecorder.start();
 
-      // When user finishes speaking, send to Whisper
+      // Insert a placeholder user message and keep its ID
+      const userMsgId = "user_" + Date.now();
+      setMessages(prev => [
+        ...prev,
+        { content: "[Transcribing...]", isUser: true, id: userMsgId }
+      ]);
+
+      // When user finishes speaking, send to Whisper and update the placeholder
       const stopAndTranscribe = async () => {
-        mediaRecorder.stop();
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         const fileReader = new FileReader();
         fileReader.onloadend = async () => {
@@ -92,7 +143,17 @@ export function ChatInterface() {
           const data = await response.json();
           const transcript = data.transcript;
           if (transcript && transcript !== 'undefined') {
-            setMessages(prev => [...prev, { content: transcript, isUser: true }]);
+            setMessages(prev => {
+              // Update the placeholder user message with the actual transcript
+              const idx = prev.findIndex((m: Message) => m.id === userMsgId);
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = { content: transcript, isUser: true, id: userMsgId };
+                return updated;
+              }
+              // If not found, just append
+              return [...prev, { content: transcript, isUser: true, id: userMsgId }];
+            });
           }
         };
         fileReader.readAsDataURL(audioBlob);
@@ -229,7 +290,10 @@ export function ChatInterface() {
           setIsVoiceStreaming(false);
           setCurrentResponse('');
           if (peerConnection) peerConnection.close();
-          if (localStream) localStream.getTracks().forEach(t => t.stop());
+          if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+          }
           if (remoteAudio) {
             remoteAudio.pause();
             remoteAudio.srcObject = null;
@@ -247,11 +311,12 @@ export function ChatInterface() {
 
   // Add avatar circle with emoji before the chat bubble
   return (
-    <div className="flex flex-col h-[80vh] w-full sm:w-[800px] mx-auto border rounded-lg">
-      <div 
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4"
-      >
+    <div className="w-full flex justify-center bg-background">
+      <div className="flex flex-col h-[80vh] w-full sm:w-[800px] mx-auto border rounded-lg">
+        <div 
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+        >
         {messages.map((message, index) => (
           message.isUser ? (
             <div key={index} className="flex items-start gap-2 justify-end">
@@ -296,23 +361,22 @@ export function ChatInterface() {
           </div>
         )}
       </div>
-      <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
-        <div className="flex-1">
-          <Button
-            onClick={() => {
-              if (isVoiceStreaming) {
-                // Stop streaming
-                setIsVoiceStreaming(false);
-                setCurrentResponse('');
-              } else {
-                startVoiceStreamingWebRTC();
-              }
-            }}
-            className={`w-full font-bold text-white ${isVoiceStreaming ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500 hover:bg-orange-600'}`}
-            style={{ transition: 'background 0.2s' }}
-          >
-            {isVoiceStreaming ? 'Stop Voice Chat' : 'Start Voice Chat'}
-          </Button>
+        <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
+          <div className="flex-1">
+            <Button
+              onClick={() => {
+                if (isVoiceStreaming) {
+                  stopVoiceStreaming();
+                } else {
+                  startVoiceStreamingWebRTC();
+                }
+              }}
+              className={`w-full font-bold text-white ${isVoiceStreaming ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500 hover:bg-orange-600'}`}
+              style={{ transition: 'background 0.2s' }}
+            >
+              {isVoiceStreaming ? 'Stop Voice Chat' : 'Start Voice Chat'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
