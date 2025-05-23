@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY || '';
 
-export const runtime = 'edge'; // for streaming
-
 /**
  * POST handler for audio transcription using OpenAI Whisper API.
  * Accepts base64-encoded audio and streams transcription chunks as JSON.
