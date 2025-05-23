@@ -11,13 +11,17 @@
   - hooks: @/hooks
 - **UI Library:** shadcn/ui with "new-york" style and lucide icons.
 - **Tailwind CSS:** Configured via src/app/globals.css, base color gray, CSS variables enabled.
-- **React/Next.js:** Use TypeScript, React Server Components (RSC) enabled.
+- **React/Next.js:** Use TypeScript, client-side React components, and Next.js app directory.
 - **Component Structure:** Place UI components in @/components/ui, utilities in @/lib/utils.
 - **Voice Chat Pattern:**
   - Use Web Audio API for voice capture.
-  - Use Gemini API for streaming AI responses.
+  - Use OpenAI Whisper API (via `/api/openai-transcribe`) for user transcription.
+  - Use OpenAI GPT-4o Realtime API (via Azure session backend and $OPENAI_REALTIME_URL) for streaming AI voice-to-voice responses.
+  - All backend URLs are set via environment variables, never hardcoded.
   - Maintain conversation state/history in React state.
-  - Render chat bubbles for both user and AI, updating in real-time.
+  - Insert a placeholder user bubble ("[Transcribing...]") when the user starts speaking, and update it in place with the actual transcript when Whisper returns.
+  - Always ensure the user bubble appears above the AI response, even if the transcript arrives later.
+  - No local proxy, no mode switching, no Gemini code.
 - **Accessibility:** Prioritize ARIA attributes and keyboard navigation in UI.
 - **Development Workflow:**
   - Update memory-bank after significant changes or when context/requirements evolve.
@@ -27,8 +31,10 @@
 - Streaming voice-to-text and AI responses in real-time with low latency.
 - Ensuring accessibility and visual polish with shadcn/ui and Tailwind.
 - Keeping imports and file structure consistent with aliases and project conventions.
+- Managing resource cleanup and session state for WebRTC and audio.
 
 ## User Preferences
 - Maintain clear, concise documentation in memory-bank.
 - Use .clinerules to capture all non-obvious project intelligence and workflow patterns.
 - Always clarify and document next steps in activeContext.md and progress.md.
+- Never leak secrets to github. Secrets include internal URLs, endpoints, and API keys.
