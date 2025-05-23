@@ -84,15 +84,24 @@ No need to run `next export`—Next.js handles static export automatically with 
 
 ```mermaid
 flowchart TD
-  A[User Mic/Audio] -->|stream| B[Chat Interface (React)]
-  B -->|buffered audio| C[Whisper API (/api/openai-transcribe)]
-  C -->|user transcript| D[User Chat Bubble]
-  B -->|stream| E[Azure Session Backend ($SESSION_URL)]
-  E -->|ephemeral token| F[OpenAI Realtime API ($OPENAI_REALTIME_URL)]
-  F -->|AI response| G[Robot Chat Bubble]
-  style B fill:#f9f9f9,stroke:#333,stroke-width:1px
-  style D fill:#e0f7fa,stroke:#333,stroke-width:1px
-  style G fill:#ffe0b2,stroke:#333,stroke-width:1px
+  UserMic -->|stream| ChatUI
+  ChatUI -->|buffered audio| WhisperAPI
+  WhisperAPI -->|user transcript| UserBubble
+  ChatUI -->|stream| AzureSession
+  AzureSession -->|ephemeral token| OpenAIRealtime
+  OpenAIRealtime -->|AI response| RobotBubble
+
+  UserMic[User Mic/Audio]
+  ChatUI[Chat Interface (React)]
+  WhisperAPI[Whisper API (/api/openai-transcribe)]
+  UserBubble[User Chat Bubble]
+  AzureSession[Azure Session Backend ($SESSION_URL)]
+  OpenAIRealtime[OpenAI Realtime API ($OPENAI_REALTIME_URL)]
+  RobotBubble[Robot Chat Bubble]
+
+  style ChatUI fill:#f9f9f9,stroke:#333,stroke-width:1px
+  style UserBubble fill:#e0f7fa,stroke:#333,stroke-width:1px
+  style RobotBubble fill:#ffe0b2,stroke:#333,stroke-width:1px
 ```
 
 - All backend URLs are set via environment variables.
