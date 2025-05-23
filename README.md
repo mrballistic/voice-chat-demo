@@ -69,15 +69,15 @@ No need to run `next export`—Next.js handles static export automatically with 
 - `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, Whisper, UI)
 - `src/components/ui/chat-bubble.tsx` – Chat bubble UI component
 - `src/lib/openai.ts` – OpenAI API utility
-- `src/app/api/openai-transcribe/route.ts` – Whisper API endpoint
-- `src/app/api/openai-chat/route.ts` – Chat completions endpoint
+- `src/app/api/openai-transcribe/route.ts` – Whisper API endpoint (for user transcription)
 - `memory-bank/` – Project documentation and context
 
 ## 📝 How It Works
 
 - When you start a voice chat, your audio is streamed to the Azure backend for session management and OpenAI Realtime API for AI voice response.
-- At the same time, your audio is buffered and sent to OpenAI Whisper for transcription as soon as you finish speaking. The transcript is shown as a user chat bubble.
+- At the same time, your audio is buffered and sent to OpenAI Whisper for transcription (via the local `/api/openai-transcribe` endpoint) as soon as you finish speaking. The transcript is shown as a user chat bubble.
 - The AI's response (text or transcript) is shown as a robot chat bubble, with no duplicates.
+- All chat logic and UI is handled client-side in React.
 - The UI is stable, accessible, and mobile-friendly.
 
 ## 🗺️ Architecture
