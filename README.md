@@ -6,7 +6,7 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 
 - **Next.js**: 15.1.8 (LTS)
 - **React**: 19.1.0 (LTS)
-- **Node.js**: 18+ recommended
+- **Node.js**: 20.x (LTS) recommended
 
 ## ✨ Features
 
