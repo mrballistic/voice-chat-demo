@@ -13,7 +13,12 @@ export async function POST(req: NextRequest) {
     if (!transcript) {
       return NextResponse.json({ error: 'No transcript provided' }, { status: 400 });
     }
-    const prompt = `Extract the following fields from this text if present: full name, phone, email, insurance provider, policy number, group number, workers comp (yes/no), how injury occurred, date of injury, symptoms, prior treatment. Return as a compact JSON object with keys: name, phone, email, insurance, policy, group, workersComp, injuryDate, injuryHow, symptoms, priorTreatment. If a field is not present, use null.`;
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const currentDate = `${yyyy}-${mm}-${dd}`;
+    const prompt = `Today's date is ${currentDate}. Extract the following fields from this text if present: full name, phone, email, insurance provider, policy number, group number, workers comp (yes/no), how injury occurred, date of injury, symptoms, prior treatment. If a date is inexact (e.g., 'last Saturday'), infer the actual date based on today's date and return the inferred date in YYYY-MM-DD format. Return as a compact JSON object with keys: name, phone, email, insurance, policy, group, workersComp, injuryDate, injuryHow, symptoms, priorTreatment. If a field is not present, use null.`;
     const messages = [
       { role: 'system', content: prompt },
       { role: 'user', content: transcript }
