@@ -21,17 +21,34 @@ interface Message {
  * Main chat interface for real-time voice chat with OpenAI.
  * Handles voice recording, streaming transcription, and chat display.
  */
+interface IntakeFields {
+  name?: string;
+  phone?: string;
+  email?: string;
+  insurance?: string;
+  policy?: string;
+  group?: string;
+  workersComp?: string;
+  injuryHow?: string;
+  injuryDate?: string;
+  symptoms?: string;
+  priorTreatment?: string;
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentResponse, setCurrentResponse] = useState('');
   const [isVoiceStreaming, setIsVoiceStreaming] = useState(false);
+  const [intake, setIntake] = useState<IntakeFields>({});
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Refs for cleanup
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  // const transcriptionPeerConnectionRef = useRef<RTCPeerConnection | null>(null); // Bypassed for now
   const localStreamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+  // --- Live user speech transcript state ---
+  const [liveUserTranscript, setLiveUserTranscript] = useState<string>('');
+  const [liveUserTranscriptItemId, setLiveUserTranscriptItemId] = useState<string | null>(null);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -46,43 +63,24 @@ export function ChatInterface() {
   const stopVoiceStreaming = () => {
     setIsVoiceStreaming(false);
     setCurrentResponse('');
-    // Close voice-to-voice peer connection
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
-    // Bypass: do not close transcription peer connection
-    // if (transcriptionPeerConnectionRef.current) {
-    //   transcriptionPeerConnectionRef.current.close();
-    //   transcriptionPeerConnectionRef.current = null;
-    // }
-    // Stop local stream
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
-    // Stop media recorder
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
-    }
   };
 
   const startVoiceStreamingWebRTC = async () => {
-    // Always clean up before starting a new session
     stopVoiceStreaming();
     setIsVoiceStreaming(true);
     setCurrentResponse('');
     let peerConnection: RTCPeerConnection | null = null;
-    // let transcriptionPeerConnection: RTCPeerConnection | null = null; // Bypassed
     let remoteAudio: HTMLAudioElement | null = null;
     let localStream: MediaStream | null = null;
     let dataChannel: RTCDataChannel | null = null;
-    // let transcriptionDataChannel: RTCDataChannel | null = null; // Bypassed
-
-    // Fallback transcription: buffer audio chunks for REST transcription
-    const audioChunks: BlobPart[] = [];
-    let userMsgId = "";
 
     try {
       // 1. Get ephemeral token from Azure session endpoint
@@ -101,20 +99,11 @@ export function ChatInterface() {
       });
       peerConnectionRef.current = peerConnection;
 
-      // 3. (Bypassed) Create RTCPeerConnection for transcription
-      // transcriptionPeerConnection = new RTCPeerConnection({
-      //   iceServers: [
-      //     { urls: 'stun:stun.l.google.com:19302' },
-      //   ],
-      // });
-      // transcriptionPeerConnectionRef.current = transcriptionPeerConnection;
-
       // 4. Get local audio stream and add to voice-to-voice connection
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = localStream;
       for (const track of localStream.getTracks()) {
         peerConnection.addTrack(track, localStream);
-        // transcriptionPeerConnection.addTrack(track, localStream); // Bypassed
       }
 
       // 5. Set up voice-to-voice DataChannel
@@ -138,7 +127,12 @@ export function ChatInterface() {
                 }
               }
             ],
-            tool_choice: "auto"
+            tool_choice: "auto",
+            input_audio_transcription: {
+              model: 'gpt-4o-transcribe',
+              prompt: '',
+              language: 'en'
+            }
           }
         }));
         dataChannel.send(JSON.stringify({
@@ -229,6 +223,24 @@ Strategically add things like:
         try {
           const msg = JSON.parse(event.data);
 
+          // Handle live user speech streaming (OpenAI input transcription)
+          if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.item_id && typeof msg.delta === 'string') {
+            // If new item, reset buffer
+            if (liveUserTranscriptItemId !== msg.item_id) {
+              setLiveUserTranscript(msg.delta);
+              setLiveUserTranscriptItemId(msg.item_id);
+            } else {
+              setLiveUserTranscript(prev => prev + msg.delta);
+            }
+            return;
+          }
+          if (msg.type === 'conversation.item.input_audio_transcription.completed' && msg.item_id && typeof msg.transcript === 'string') {
+            setMessages(prev => [...prev, { content: msg.transcript, isUser: true }]);
+            setLiveUserTranscript('');
+            setLiveUserTranscriptItemId(null);
+            return;
+          }
+
           // Helper to filter and display only AI output
           function showAIText(item: unknown) {
             if (typeof item === 'object' && item !== null) {
@@ -262,15 +274,6 @@ Strategically add things like:
         }
       };
 
-      // 6. (Bypassed) Set up transcription DataChannel
-      // transcriptionDataChannel = transcriptionPeerConnection.createDataChannel('transcription-events');
-      // transcriptionDataChannel.onopen = () => {
-      //   console.log('Transcription DataChannel open');
-      // };
-      // transcriptionDataChannel.onmessage = (event) => {
-      //   // ...bypassed...
-      // };
-
       // 7. Play remote audio for voice-to-voice
       peerConnection.ontrack = (event) => {
         if (!remoteAudio) {
@@ -303,17 +306,6 @@ Strategically add things like:
       const answer: RTCSessionDescriptionInit = { type: 'answer', sdp: sdpText };
       await peerConnection.setRemoteDescription(answer);
 
-      // 10. (Bypassed) Create offer and set as local description for transcription
-      // const transcriptionOffer = await transcriptionPeerConnection.createOffer();
-      // await transcriptionPeerConnection.setLocalDescription(transcriptionOffer);
-
-      // 11. (Bypassed) POST offer.sdp to Azure session endpoint for transcription
-      // const transcriptionSdpResp = await fetch(sessionUrl, { ... });
-      // if (!transcriptionSdpResp.ok) throw new Error('Failed to exchange transcription SDP');
-      // const transcriptionSdpText = await transcriptionSdpResp.text();
-      // const transcriptionAnswer: RTCSessionDescriptionInit = { type: 'answer', sdp: transcriptionSdpText };
-      // await transcriptionPeerConnection.setRemoteDescription(transcriptionAnswer);
-
       // 12. Update UI state
       setCurrentResponse('');
 
@@ -328,9 +320,6 @@ Strategically add things like:
           setCurrentResponse('');
           if (peerConnection) peerConnection.close();
           if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-            mediaRecorderRef.current.stop();
-          }
           if (remoteAudio) {
             remoteAudio.pause();
             remoteAudio.srcObject = null;
@@ -338,56 +327,6 @@ Strategically add things like:
           }
         }
       };
-      // transcriptionPeerConnection.onconnectionstatechange = () => { ... } // Bypassed
-
-      // --- Fallback: Non-realtime transcription (buffer audio, send to REST endpoint) ---
-      // Set up MediaRecorder to buffer audio and send to /api/openai-transcribe after stop
-      mediaRecorderRef.current = new window.MediaRecorder(localStream, { mimeType: 'audio/webm;codecs=opus' });
-      mediaRecorderRef.current.ondataavailable = (event: BlobEvent) => {
-        audioChunks.push(event.data);
-      };
-      mediaRecorderRef.current.onstop = async () => {
-        // Insert a placeholder user message and keep its ID
-        userMsgId = "user_" + Date.now();
-        setMessages(prev => [
-          ...prev,
-          { content: "[Transcribing...]", isUser: true, id: userMsgId }
-        ] as Message[]);
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        const fileReader = new FileReader();
-        fileReader.onloadend = async () => {
-          const base64Audio = typeof fileReader.result === 'string' ? fileReader.result.split(',')[1] : undefined;
-          if (!base64Audio) return;
-          // Send to Whisper (fallback/final transcript)
-          const response = await fetch('/api/openai-transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audio: base64Audio,
-              mimeType: 'audio/webm'
-            })
-          });
-          if (!response.ok) return;
-          const data = await response.json();
-          const transcript = data.transcript;
-          if (transcript && transcript !== 'undefined') {
-            setMessages(prev => {
-              // Update the placeholder user message with the actual transcript
-              const idx = prev.findIndex((m: Message) => m.id === userMsgId);
-              if (idx !== -1) {
-                const updated = [...prev];
-                updated[idx] = { content: transcript, isUser: true, id: userMsgId };
-                return updated as Message[];
-              }
-              // If not found, just append
-              return [...prev, { content: transcript, isUser: true, id: userMsgId }] as Message[];
-            });
-          }
-        };
-        fileReader.readAsDataURL(audioBlob);
-      };
-      mediaRecorderRef.current.start();
-
     } catch (err) {
       setIsVoiceStreaming(false);
       setCurrentResponse('[WebRTC Error]');
@@ -395,6 +334,48 @@ Strategically add things like:
       console.error('WebRTC error:', err);
     }
   };
+
+  // Helper: update intake fields from any message (user or AI)
+  function tryExtractIntakeField(message: Message) {
+    const text = message.content.toLowerCase();
+    // Name
+    const nameMatch = text.match(/(?:my name is|i am|this is)\s+([a-z ,.'-]+)/i);
+    if (nameMatch) setIntake(intake => ({ ...intake, name: nameMatch[1].trim() }));
+    // Phone
+    const phoneMatch = text.match(/(\(?\d{3}[)\-\s]?\d{3}[\-\s]?\d{4})/);
+    if (phoneMatch) setIntake(intake => ({ ...intake, phone: phoneMatch[1].trim() }));
+    // Email
+    const emailMatch = text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/);
+    if (emailMatch) setIntake(intake => ({ ...intake, email: emailMatch[0].trim() }));
+    // Insurance
+    const insuranceMatch = text.match(/insurance (?:provider|company|is|:)\s*([a-z0-9 .'-]+)/i);
+    if (insuranceMatch) setIntake(intake => ({ ...intake, insurance: insuranceMatch[1].trim() }));
+    // Policy
+    const policyMatch = text.match(/policy (?:number|#|is|:)\s*([a-z0-9-]+)/i);
+    if (policyMatch) setIntake(intake => ({ ...intake, policy: policyMatch[1].trim() }));
+    // Group
+    const groupMatch = text.match(/group (?:number|#|is|:)\s*([a-z0-9-]+)/i);
+    if (groupMatch) setIntake(intake => ({ ...intake, group: groupMatch[1].trim() }));
+    // Workers Comp
+    if (/workers[\s\-]?comp/i.test(text)) setIntake(intake => ({ ...intake, workersComp: message.content }));
+    // How injury occurred
+    if (/injur(y|ed|ies|ing)/.test(text) && /(how|occur|happen|cause)/.test(text)) setIntake(intake => ({ ...intake, injuryHow: message.content }));
+    // Date of injury
+    const dateMatch = text.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+    if (dateMatch) setIntake(intake => ({ ...intake, injuryDate: dateMatch[1].trim() }));
+    // Symptoms
+    if (/symptom|pain|swelling|mobility|stiff|bruise|sore|ache/.test(text)) setIntake(intake => ({ ...intake, symptoms: message.content }));
+    // Prior treatment
+    if (/prior treatment|urgent care|x-ray|medication|seen before|previously seen/.test(text)) setIntake(intake => ({ ...intake, priorTreatment: message.content }));
+  }
+
+  // Update intake fields when a new message is added (user or AI)
+  useEffect(() => {
+    if (messages.length > 0) {
+      const last = messages[messages.length - 1];
+      tryExtractIntakeField(last);
+    }
+  }, [messages]);
 
   // Add avatar circle with emoji before the chat bubble
   return (
@@ -404,13 +385,39 @@ Strategically add things like:
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4"
         >
-        {messages.map((message, index) => (
-          message.isUser ? (
-            <div key={index} className="flex items-start gap-2 justify-end">
-              <ChatBubble 
-                content={message.content}
-                isUser={message.isUser}
-              />
+          {messages.map((message, index) => (
+            message.isUser ? (
+              <div key={index} className="flex items-start gap-2 justify-end">
+                <ChatBubble 
+                  content={message.content}
+                  isUser={message.isUser}
+                />
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: '#333' }}
+                >
+                  🧔
+                </div>
+              </div>
+            ) : (
+              <div key={index} className="flex items-start gap-2">
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: '#333' }}
+                >
+                  🤖
+                </div>
+                <ChatBubble 
+                  content={message.content}
+                  isUser={message.isUser}
+                />
+              </div>
+            )
+          ))}
+          {/* Show live user transcript as a user bubble while speaking */}
+          {liveUserTranscript && (
+            <div className="flex items-start gap-2 justify-end opacity-70">
+              <ChatBubble content={liveUserTranscript} isUser={true} />
               <div
                 className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                 style={{ background: '#333' }}
@@ -418,36 +425,39 @@ Strategically add things like:
                 🧔
               </div>
             </div>
-          ) : (
-            <div key={index} className="flex items-start gap-2">
+          )}
+          {currentResponse && (
+            <div className="flex items-start gap-2">
               <div
                 className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                 style={{ background: '#333' }}
               >
-                🤖
+                {'🤖'}
               </div>
               <ChatBubble 
-                content={message.content}
-                isUser={message.isUser}
+                content={currentResponse}
+                isUser={false}
               />
             </div>
-          )
-        ))}
-        {currentResponse && (
-          <div className="flex items-start gap-2">
-            <div
-              className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: '#333' }}
-            >
-              {'🤖'}
-            </div>
-            <ChatBubble 
-              content={currentResponse}
-              isUser={false}
-            />
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+        {/* Intake data summary display */}
+        <div className="border-t bg-muted p-4 text-sm">
+          <div className="font-semibold mb-2">Collected Intake Data:</div>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+            {intake.name && <li><b>Name:</b> {intake.name}</li>}
+            {intake.phone && <li><b>Phone:</b> {intake.phone}</li>}
+            {intake.email && <li><b>Email:</b> {intake.email}</li>}
+            {intake.insurance && <li><b>Insurance:</b> {intake.insurance}</li>}
+            {intake.policy && <li><b>Policy #:</b> {intake.policy}</li>}
+            {intake.group && <li><b>Group #:</b> {intake.group}</li>}
+            {intake.workersComp && <li><b>Workers Comp:</b> {intake.workersComp}</li>}
+            {intake.injuryHow && <li><b>How Injury Occurred:</b> {intake.injuryHow}</li>}
+            {intake.injuryDate && <li><b>Date of Injury:</b> {intake.injuryDate}</li>}
+            {intake.symptoms && <li><b>Symptoms:</b> {intake.symptoms}</li>}
+            {intake.priorTreatment && <li><b>Prior Treatment:</b> {intake.priorTreatment}</li>}
+          </ul>
+        </div>
         <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
           <div className="flex-1">
             <Button
