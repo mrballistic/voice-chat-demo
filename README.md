@@ -1,6 +1,6 @@
-# 🎤 Real-Time Voice Chat Demo (OpenAI GPT-4o + Whisper)
+# 🎤 Real-Time Voice Chat Demo (OpenAI GPT-4o Realtime)
 
-A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Tailwind CSS. This app streams user voice to OpenAI Whisper for transcription and uses OpenAI GPT-4o Realtime API for voice-to-voice AI chat. No local proxy or mode switching required.
+A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Tailwind CSS. This app streams user voice to OpenAI's new GPT-4o Realtime API for voice-to-voice AI chat and live user transcription. No Whisper, no local proxy, no mode switching required.
 
 ## ⚠️ Requirements
 
@@ -12,7 +12,7 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 
 - 🎙️ Real-time voice input (Web Audio API)
 - 🗣️ Voice-to-voice chat with OpenAI GPT-4o Realtime API (via Azure session backend)
-- 📝 User transcription with OpenAI Whisper (runs in parallel, user bubble shown as soon as you finish speaking)
+- 📝 User transcription and intake extraction powered by GPT-4o Realtime (no Whisper)
 - 💬 AI responses (text or transcript) shown as robot chat bubbles
 - 💎 Modern, accessible UI (shadcn/ui, Tailwind CSS)
 - 📱 Responsive, fixed-width chat area for stable layout
@@ -24,7 +24,7 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 
 - **Framework:** Next.js 15.1.8 (React 19.1.0, TypeScript)
 - **UI:** shadcn/ui, Tailwind CSS
-- **API:** OpenAI Whisper (speech-to-text), OpenAI GPT-4o Realtime (voice-to-voice)
+- **API:** OpenAI GPT-4o Realtime (voice-to-voice, user transcription, and intake extraction)
 - **Voice:** Web Audio API, MediaRecorder
 
 ## 🚀 Getting Started
@@ -57,7 +57,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the app.
 
 ## 🏗️ Static Export & Deployment
 
-> **Warning:** API routes (including `/api/openai-extract-intake` and `/api/openai-transcribe`) require a serverless or Node.js backend. They will NOT work on static-only hosts like GitHub Pages. For dynamic features, deploy to Vercel, Netlify, or your own backend.
+> **Warning:** API routes (including `/api/openai-extract-intake`) require a serverless or Node.js backend. They will NOT work on static-only hosts like GitHub Pages. For dynamic features, deploy to Vercel, Netlify, or your own backend.
 
 To generate a static export (for deployment to static hosting):
 
@@ -81,7 +81,7 @@ npm run build
 
 ## 🗂️ Project Structure
 
-- `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, Whisper, UI)
+- `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, UI)
 - `src/components/ui/chat-bubble.tsx` – Chat bubble UI component
 - `src/lib/openai.ts` – OpenAI API utility
 - `src/app/api/openai-transcribe/route.ts` – Whisper API endpoint (for user transcription)

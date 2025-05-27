@@ -2,7 +2,7 @@
 
 **What works:**
 - Real-time voice capture and silence detection
-- Transcription via OpenAI Whisper API
+- Real-time user transcription and intake extraction via OpenAI GPT-4o Realtime API (no Whisper)
 - Streaming chat completions via OpenAI GPT-4o (NDJSON, real-time UI updates)
 - Node.js WebSocket proxy for OpenAI realtime voice-to-voice API (local/dev)
 - Proxy relays AI audio as binary to frontend, all other messages as JSON
