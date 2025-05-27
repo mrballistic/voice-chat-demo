@@ -81,11 +81,11 @@ npm run build
 
 ## 🗂️ Project Structure
 
-- `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, UI)
+- `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, UI, intake extraction logic)
 - `src/components/ui/chat-bubble.tsx` – Chat bubble UI component
 - `src/lib/openai.ts` – OpenAI API utility
-- `src/app/api/openai-transcribe/route.ts` – Whisper API endpoint (for user transcription)
-- `memory-bank/` – Project documentation and context
+- `src/app/api/openai-extract-intake/route.ts` – Intake extraction API endpoint (GPT-4o, cumulative fields)
+- `memory-bank/` – Project documentation and context (see Memory Bank section)
 
 ## 📝 How It Works
 
