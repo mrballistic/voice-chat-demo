@@ -234,12 +234,15 @@ Strategically add things like:
             return;
           }
           if (msg.type === 'conversation.item.input_audio_transcription.completed' && msg.item_id && typeof msg.transcript === 'string') {
-            setMessages(prev => [...prev, { content: msg.transcript, isUser: true }]);
-            setLiveUserTranscript('');
-            setLiveUserTranscriptItemId(null);
-            // Extract intake fields from all user messages so far
-            const allUserSpeech = [...messages.filter(m => m.isUser).map(m => m.content), msg.transcript].join('\n');
-            extractIntakeWithGPT(allUserSpeech);
+            setMessages(prev => {
+              const updatedMessages = [...prev, { content: msg.transcript, isUser: true }];
+              setLiveUserTranscript('');
+              setLiveUserTranscriptItemId(null);
+              // Concatenate all user messages for full transcript
+              const allUserSpeech = updatedMessages.filter(m => m.isUser).map(m => m.content).join('\n');
+              extractIntakeWithGPT(allUserSpeech);
+              return updatedMessages;
+            });
             return;
           }
 
