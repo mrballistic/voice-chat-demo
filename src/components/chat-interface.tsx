@@ -340,7 +340,13 @@ Strategically add things like:
   // Helper: extract intake fields using GPT-4o via API route
   async function extractIntakeWithGPT(fullTranscript: string) {
     try {
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+      // Auto-detect base path for local dev and subdirectory deployments
+      let basePath = '';
+      if (typeof window !== 'undefined') {
+        basePath = window.location.pathname.startsWith('/voice-chat-demo') ? '/voice-chat-demo' : '';
+      } else if (process.env.NEXT_PUBLIC_BASE_PATH) {
+        basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+      }
       const apiUrl = `${basePath}/api/openai-extract-intake`;
       const resp = await fetch(apiUrl, {
         method: 'POST',
@@ -349,7 +355,9 @@ Strategically add things like:
       });
       if (!resp.ok) return;
       const data = await resp.json();
-      if (data.fields) setIntake(data.fields);
+      if (data.fields) {
+        setIntake(prev => ({ ...prev, ...data.fields }));
+      }
     } catch {
       // Optionally log error
     }
