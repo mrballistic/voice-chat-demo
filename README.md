@@ -89,9 +89,11 @@ npm run build
 
 ## 📝 How It Works
 
-- When you start a voice chat, your audio is streamed to the Azure backend for session management and OpenAI Realtime API for AI voice response.
-- At the same time, your audio is buffered and sent to OpenAI Whisper for transcription (via the local `/api/openai-transcribe` endpoint) as soon as you finish speaking. The transcript is shown as a user chat bubble.
-- The AI's response (text or transcript) is shown as a robot chat bubble, with no duplicates.
+- When you start a voice chat, your audio is streamed in real time to the Azure backend for session management and then to the OpenAI GPT-4o Realtime API for both AI voice response and live user transcription.
+- The OpenAI GPT-4o Realtime API provides:
+  - Real-time AI voice and text responses (played back and shown as robot chat bubbles)
+  - Real-time streaming user transcription (shown as a user chat bubble as you speak)
+- All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively. The intake panel always shows the latest, most complete set of user-provided data.
 - All chat logic and UI is handled client-side in React.
 - The UI is stable, accessible, and mobile-friendly.
 
@@ -100,15 +102,16 @@ npm run build
 ```mermaid
 flowchart TD
   A["User Mic/Audio"] -->|stream| B["Chat Interface (React)"]
-  B -->|buffered audio| C["Whisper API (/api/openai-transcribe)"]
-  C -->|user transcript| D["User Chat Bubble"]
-  B -->|stream| E["Azure Session Backend (\$SESSION_URL)"]
-  E -->|ephemeral token| F["OpenAI Realtime API (\$OPENAI_REALTIME_URL)"]
-  F -->|AI response| G["Robot Chat Bubble"]
+  B -->|WebRTC stream| C["Azure Session Backend ($SESSION_URL)"]
+  C -->|ephemeral token| D["OpenAI GPT-4o Realtime API ($OPENAI_REALTIME_URL)"]
+  D -->|AI voice/text response| E["Robot Chat Bubble + Audio"]
+  D -->|User transcript| F["User Chat Bubble"]
+  B -->|finalized user transcript| G["/api/openai-extract-intake (GPT-4o)"]
+  G -->|intake fields| H["Intake Panel"]
 ```
 
 - All backend URLs are set via environment variables.
-- No local proxy or mode switching.
+- No Whisper, no local proxy, no mode switching.
 
 ## 📄 License
 
