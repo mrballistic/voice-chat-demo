@@ -225,7 +225,6 @@ Strategically add things like:
 
           // Handle live user speech streaming (OpenAI input transcription)
           if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.item_id && typeof msg.delta === 'string') {
-            // If new item, reset buffer
             if (liveUserTranscriptItemId !== msg.item_id) {
               setLiveUserTranscript(msg.delta);
               setLiveUserTranscriptItemId(msg.item_id);
@@ -238,6 +237,9 @@ Strategically add things like:
             setMessages(prev => [...prev, { content: msg.transcript, isUser: true }]);
             setLiveUserTranscript('');
             setLiveUserTranscriptItemId(null);
+            // Extract intake fields from all user messages so far
+            const allUserSpeech = [...messages.filter(m => m.isUser).map(m => m.content), msg.transcript].join('\n');
+            extractIntakeWithGPT(allUserSpeech);
             return;
           }
 
@@ -335,47 +337,23 @@ Strategically add things like:
     }
   };
 
-  // Helper: update intake fields from any message (user or AI)
-  function tryExtractIntakeField(message: Message) {
-    const text = message.content.toLowerCase();
-    // Name
-    const nameMatch = text.match(/(?:my name is|i am|this is)\s+([a-z ,.'-]+)/i);
-    if (nameMatch) setIntake(intake => ({ ...intake, name: nameMatch[1].trim() }));
-    // Phone
-    const phoneMatch = text.match(/(\(?\d{3}[)\-\s]?\d{3}[\-\s]?\d{4})/);
-    if (phoneMatch) setIntake(intake => ({ ...intake, phone: phoneMatch[1].trim() }));
-    // Email
-    const emailMatch = text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/);
-    if (emailMatch) setIntake(intake => ({ ...intake, email: emailMatch[0].trim() }));
-    // Insurance
-    const insuranceMatch = text.match(/insurance (?:provider|company|is|:)\s*([a-z0-9 .'-]+)/i);
-    if (insuranceMatch) setIntake(intake => ({ ...intake, insurance: insuranceMatch[1].trim() }));
-    // Policy
-    const policyMatch = text.match(/policy (?:number|#|is|:)\s*([a-z0-9-]+)/i);
-    if (policyMatch) setIntake(intake => ({ ...intake, policy: policyMatch[1].trim() }));
-    // Group
-    const groupMatch = text.match(/group (?:number|#|is|:)\s*([a-z0-9-]+)/i);
-    if (groupMatch) setIntake(intake => ({ ...intake, group: groupMatch[1].trim() }));
-    // Workers Comp
-    if (/workers[\s\-]?comp/i.test(text)) setIntake(intake => ({ ...intake, workersComp: message.content }));
-    // How injury occurred
-    if (/injur(y|ed|ies|ing)/.test(text) && /(how|occur|happen|cause)/.test(text)) setIntake(intake => ({ ...intake, injuryHow: message.content }));
-    // Date of injury
-    const dateMatch = text.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
-    if (dateMatch) setIntake(intake => ({ ...intake, injuryDate: dateMatch[1].trim() }));
-    // Symptoms
-    if (/symptom|pain|swelling|mobility|stiff|bruise|sore|ache/.test(text)) setIntake(intake => ({ ...intake, symptoms: message.content }));
-    // Prior treatment
-    if (/prior treatment|urgent care|x-ray|medication|seen before|previously seen/.test(text)) setIntake(intake => ({ ...intake, priorTreatment: message.content }));
-  }
-
-  // Update intake fields when a new message is added (user or AI)
-  useEffect(() => {
-    if (messages.length > 0) {
-      const last = messages[messages.length - 1];
-      tryExtractIntakeField(last);
+  // Helper: extract intake fields using GPT-4o via API route
+  async function extractIntakeWithGPT(fullTranscript: string) {
+    try {
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+      const apiUrl = `${basePath}/api/openai-extract-intake`;
+      const resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: fullTranscript })
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.fields) setIntake(data.fields);
+    } catch {
+      // Optionally log error
     }
-  }, [messages]);
+  }
 
   // Add avatar circle with emoji before the chat bubble
   return (
