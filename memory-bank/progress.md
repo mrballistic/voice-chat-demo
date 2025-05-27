@@ -9,6 +9,8 @@
 - Frontend streams PCM16 audio to proxy, plays back AI-generated audio in real time
 - Modern, accessible UI with shadcn/ui and Tailwind CSS
 - Dark mode and error handling
+- **Cumulative intake extraction:** All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields. The intake panel always shows the latest, most complete set of user-provided data.
+- **Subdirectory support:** Frontend auto-detects base path for API calls, supporting both root and subdirectory deployments (e.g., GitHub Pages).
 
 **What's left:**
 - Further UI/UX polish and accessibility
@@ -19,3 +21,4 @@
 **Known issues:**
 - Some edge cases in audio streaming/playback may need further handling
 - All Gemini/Google code removed; all OpenAI endpoints are functional
+- **API routes will not work on static-only hosts (e.g., GitHub Pages).** Use Vercel/Netlify or a custom backend for dynamic features.

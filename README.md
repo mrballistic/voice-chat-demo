@@ -17,6 +17,8 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 - 💎 Modern, accessible UI (shadcn/ui, Tailwind CSS)
 - 📱 Responsive, fixed-width chat area for stable layout
 - 🔥 Single "Voice Chat" toggle button (orange/red), no mode switching, no WebRTC jargon
+- 🗂️ **Cumulative intake extraction:** All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively. The intake panel always shows the latest, most complete set of user-provided data.
+- 🛣️ **Subdirectory support:** Frontend auto-detects base path for API calls, supporting both root and subdirectory deployments (e.g., GitHub Pages).
 
 ## 🛠️ Tech Stack
 
@@ -53,7 +55,9 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 
 Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-## 🏗️ Static Export
+## 🏗️ Static Export & Deployment
+
+> **Warning:** API routes (including `/api/openai-extract-intake` and `/api/openai-transcribe`) require a serverless or Node.js backend. They will NOT work on static-only hosts like GitHub Pages. For dynamic features, deploy to Vercel, Netlify, or your own backend.
 
 To generate a static export (for deployment to static hosting):
 
@@ -61,8 +65,19 @@ To generate a static export (for deployment to static hosting):
 npm run build
 ```
 
-The static site will be output to the `out/` directory.  
-No need to run `next export`—Next.js handles static export automatically with `output: 'export'` in `next.config.ts`.
+- For subdirectory deployments (e.g., GitHub Pages), the frontend auto-detects the base path for API calls, but API routes will return 404 unless you deploy to a platform that supports serverless functions.
+
+## 🧠 Intake Extraction (GPT-4o)
+
+- All finalized user speech is concatenated and sent to `/api/openai-extract-intake`.
+- The backend uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively.
+- The intake panel always shows the latest, most complete set of user-provided data.
+
+## 📝 Known Limitations
+
+- API routes will not work on static-only hosts (e.g., GitHub Pages). Use Vercel/Netlify or a custom backend for dynamic features.
+- Some edge cases in audio streaming/playback may need further handling.
+- All Gemini/Google code removed; all OpenAI endpoints are functional.
 
 ## 🗂️ Project Structure
 
