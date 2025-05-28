@@ -432,7 +432,7 @@ Strategically add things like:
         </div>
         {/* Intake data summary display */}
         <div className="border-t bg-muted p-4 text-sm">
-          <div className="font-semibold mb-2">Collected Intake Data:</div>
+          <div className="font-semibold text-lg mb-2">Collected Intake Data:</div>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
             {intake.name && <li><b>Name:</b> {intake.name}</li>}
             {intake.phone && <li><b>Phone:</b> {intake.phone}</li>}
