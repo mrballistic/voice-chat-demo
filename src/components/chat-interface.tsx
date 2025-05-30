@@ -15,6 +15,7 @@ interface Message {
   content: string;
   isUser: boolean;
   id?: string;
+  timestamp?: number; // ms since epoch
 }
 
 /**
@@ -49,6 +50,9 @@ export function ChatInterface() {
   // --- Live user speech transcript state ---
   const [liveUserTranscript, setLiveUserTranscript] = useState<string>('');
   const [liveUserTranscriptItemId, setLiveUserTranscriptItemId] = useState<string | null>(null);
+  const lastFinalizedTranscriptIdRef = useRef<string | null>(null);
+
+
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -58,6 +62,20 @@ export function ChatInterface() {
   }, [messages, currentResponse]);
 
   // --- WebRTC Voice-to-Voice Integration (Realtime) ---
+
+  // Register a tool for the agent to call for appointment lookup
+  const tools = [
+    {
+      type: "function",
+      name: "find_first_available_appointment",
+      description: "Find the first available appointment slot in the group calendar, starting 1 day from today.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    }
+  ];
 
   // Cleanup function to stop all WebRTC/media resources
   const stopVoiceStreaming = () => {
@@ -115,18 +133,7 @@ export function ChatInterface() {
           type: "session.update",
           session: {
             voice: "shimmer",
-            tools: [
-              {
-                type: "function",
-                name: "search_web",
-                description: "Search the web for current information about any topic",
-                parameters: {
-                  type: "object",
-                  properties: { query: { type: "string" } },
-                  required: ["query"]
-                }
-              }
-            ],
+            tools,
             tool_choice: "auto",
             input_audio_transcription: {
               model: 'gpt-4o-transcribe',
@@ -199,7 +206,7 @@ Strategically add things like:
   10. **Current symptoms** (pain, swelling, mobility, etc.)
   11. **Any prior treatment** (e.g., urgent care, X-rays, medications)
 
-  After collecting that information, offer an **appointment with a PA approximately two weeks out**:
+  After collecting that information, offer an **appointment with a PA** using the find_first_available_appointment tool:
 
     “Okay, we can get you in with one of our excellent PAs in about two weeks. They're trained in orthopedic injuries and can evaluate and treat ankle sprains right away.”
 
@@ -235,21 +242,87 @@ Strategically add things like:
           }
           if (msg.type === 'conversation.item.input_audio_transcription.completed' && msg.item_id && typeof msg.transcript === 'string') {
             setMessages(prev => {
-              const updatedMessages = [...prev, { content: msg.transcript, isUser: true }];
-              setLiveUserTranscript('');
-              setLiveUserTranscriptItemId(null);
-              // Concatenate all user messages for full transcript
-              const allUserSpeech = updatedMessages.filter(m => m.isUser).map(m => m.content).join('\n');
-              extractIntakeWithGPT(allUserSpeech);
-              return updatedMessages;
+              const now = Date.now();
+              const newNorm = msg.transcript.trim().toLowerCase();
+              function levenshtein(a: string, b: string) {
+                const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+                for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+                for (let i = 1; i <= a.length; i++) {
+                  for (let j = 1; j <= b.length; j++) {
+                    if (a[i - 1] === b[j - 1]) {
+                      matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                      matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j] + 1
+                      );
+                    }
+                  }
+                }
+                return matrix[a.length][b.length];
+              }
+              const len = newNorm.length;
+              const threshold = Math.max(2, Math.ceil(len * 0.1));
+              // If a message with this item_id exists, update it and do NOT add a new one
+              const idx = prev.findIndex(m => m.isUser && m.id === msg.item_id);
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], content: msg.transcript, timestamp: now };
+                return updated;
+              }
+              // If any prior user message is a near-duplicate, do NOT add
+              const hasNearDuplicate = prev.some(m => {
+                if (!m.isUser || !m.content) return false;
+                const prevNorm = m.content.trim().toLowerCase();
+                if (
+                  newNorm === prevNorm ||
+                  newNorm.includes(prevNorm) ||
+                  prevNorm.includes(newNorm) ||
+                  levenshtein(newNorm, prevNorm) <= threshold
+                ) {
+                  return true;
+                }
+                return false;
+              });
+              if (hasNearDuplicate) {
+                return prev;
+              }
+              // Add new user message (no item_id or near-duplicate found)
+              return [...prev, { content: msg.transcript, isUser: true, id: msg.item_id, timestamp: now }];
             });
+            setLiveUserTranscript('');
+            setLiveUserTranscriptItemId(null);
+            lastFinalizedTranscriptIdRef.current = msg.item_id;
+            return;
+          }
+
+          // Do NOT add user messages on conversation.item.created (system echo)
+          if (
+            msg.type === 'conversation.item.created' &&
+            msg.item &&
+            msg.item.role === 'user' &&
+            msg.item.type === 'message'
+          ) {
+            // Ignore system echo user messages
+            return;
+          }
+
+          // Tool call: find_first_available_appointment
+          if (msg.type === 'function.call' && msg.name === 'find_first_available_appointment') {
+            offerFirstAvailableAppointment();
             return;
           }
 
           // Helper to filter and display only AI output
           function showAIText(item: unknown) {
             if (typeof item === 'object' && item !== null) {
-              const maybeItem = item as { text?: unknown; transcript?: unknown };
+              // If this is a system echo of a user message, skip it
+              const maybeItem = item as { text?: unknown; transcript?: unknown; role?: string; type?: string };
+              if (maybeItem.role === 'user' && maybeItem.type === 'message') {
+                // Do not add user messages from system echo
+                return;
+              }
               if (typeof maybeItem.text === 'string') {
                 setMessages(prev => [...prev, { content: maybeItem.text as string, isUser: false }]);
               } else if (typeof maybeItem.transcript === 'string') {
@@ -366,6 +439,62 @@ Strategically add things like:
     }
   }
 
+  // Helper: Find and offer the first available appointment slot after chat ends
+  async function offerFirstAvailableAppointment() {
+    try {
+      let basePath = '';
+      if (typeof window !== 'undefined') {
+        basePath = window.location.pathname.startsWith('/voice-chat-demo') ? '/voice-chat-demo' : '';
+      } else if (process.env.NEXT_PUBLIC_BASE_PATH) {
+        basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+      }
+      const apiUrl = `${basePath}/api/calendar/first-available`;
+      const resp = await fetch(apiUrl, { credentials: 'include' });
+      if (!resp.ok) {
+        setMessages(prev => [...prev, { content: 'Sorry, I could not find any open appointment slots.', isUser: false }]);
+        return;
+      }
+      const data = await resp.json();
+      if (data.slot) {
+        const start = new Date(data.slot.start);
+        setMessages(prev => [
+          ...prev,
+          {
+            content: `Great! The first available appointment is on ${start.toLocaleDateString()} at ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Would you like to book this slot?`,
+            isUser: false
+          }
+        ]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { content: 'Sorry, I could not check the calendar for open times.', isUser: false }]);
+    }
+  }
+
+  // Automatically offer appointment after intake is complete
+  useEffect(() => {
+    // Define required fields for intake completion
+    const requiredFields = [
+      'name', 'phone', 'insurance', 'policy', 'group', 'injuryHow', 'injuryDate', 'symptoms'
+    ];
+    const intakeComplete = requiredFields.every(f => intake[f as keyof typeof intake]);
+    if (intakeComplete && !messages.some(m => m.content.includes('first available appointment'))) {
+      offerFirstAvailableAppointment();
+    }
+    // Only run when intake changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intake]);
+
+  // Only run if the last message is a new user message
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (!last.isUser) return;
+    // Build full transcript from all user messages
+    const allUserSpeech = messages.filter(m => m.isUser).map(m => m.content).join('\n');
+    extractIntakeWithGPT(allUserSpeech);
+    // Optionally, debounce this if you want to avoid too many calls
+  }, [messages]);
+
   // Add avatar circle with emoji before the chat bubble
   return (
     <div className="w-full flex justify-center bg-background">
@@ -376,18 +505,22 @@ Strategically add things like:
         >
           {messages.map((message, index) => (
             message.isUser ? (
-              <div key={index} className="flex items-start gap-2 justify-end">
-                <ChatBubble 
-                  content={message.content}
-                  isUser={message.isUser}
-                />
-                <div
-                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ background: '#333' }}
-                >
-                  🧔
+              message.timestamp ? (
+                <div key={index} className="flex items-start gap-2 justify-end">
+                  <ChatBubble 
+                    content={message.content}
+                    isUser={message.isUser}
+                  />
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: '#333' }}
+                  >
+                    🧔
+                  </div>
                 </div>
-              </div>
+              ) : (
+                (() => { console.warn('Skipping user message without timestamp:', message); return null; })()
+              )
             ) : (
               <div key={index} className="flex items-start gap-2">
                 <div
@@ -403,17 +536,33 @@ Strategically add things like:
               </div>
             )
           ))}
-          {/* Show live user transcript as a user bubble while speaking */}
+          {/* Show live user transcript as a user bubble while speaking, only if not nearly identical to last user message */}
           {liveUserTranscript && (
-            <div className="flex items-start gap-2 justify-end opacity-70">
-              <ChatBubble content={liveUserTranscript} isUser={true} />
-              <div
-                className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: '#333' }}
-              >
-                🧔
-              </div>
-            </div>
+            (() => {
+              // Compare to last user message
+              const lastUserMsg = messages.length > 0 && messages[messages.length - 1].isUser ? messages[messages.length - 1].content : '';
+              // Simple similarity: ignore case, trim, and check if equal or if one is a substring of the other
+              const liveNorm = liveUserTranscript.trim().toLowerCase();
+              const lastNorm = (lastUserMsg || '').trim().toLowerCase();
+              if (
+                liveNorm &&
+                lastNorm &&
+                (liveNorm === lastNorm || lastNorm.includes(liveNorm) || liveNorm.includes(lastNorm))
+              ) {
+                return null;
+              }
+              return (
+                <div className="flex items-start gap-2 justify-end opacity-70">
+                  <ChatBubble content={liveUserTranscript} isUser={true} />
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: '#333' }}
+                  >
+                    🧔
+                  </div>
+                </div>
+              );
+            })()
           )}
           {currentResponse && (
             <div className="flex items-start gap-2">

@@ -4,7 +4,7 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 
 ## ⚠️ Requirements
 
-- **Next.js**: 15.1.8 (LTS)
+- **Next.js**: 15.3.3 or newer (LTS)
 - **React**: 19.1.0 (LTS)
 - **Node.js**: 20.x (LTS) recommended
 
@@ -57,7 +57,9 @@ Open [http://localhost:3000](http://localhost:3000) to view the app.
 
 ## 🏗️ Static Export & Deployment
 
-> **Warning:** API routes (including `/api/openai-extract-intake`) require a serverless or Node.js backend. They will NOT work on static-only hosts like GitHub Pages. For dynamic features, deploy to Vercel, Netlify, or your own backend.
+> **Warning:** API routes (including `/api/openai-extract-intake` and **all authentication endpoints like `/api/auth/[...nextauth]`**) require a serverless or Node.js backend. They will **NOT** work on static-only hosts like GitHub Pages. For authentication and dynamic features, you must deploy to Vercel, Netlify, or your own backend **with serverless function support**.
+
+> **Note:** If you want to use NextAuth.js or any dynamic API route, you must remove or comment out `output: 'export'` in `next.config.ts`.
 
 To generate a static export (for deployment to static hosting):
 
