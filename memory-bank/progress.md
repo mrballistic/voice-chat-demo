@@ -11,6 +11,7 @@
 - Dark mode and error handling
 - **Cumulative intake extraction:** All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields. The intake panel always shows the latest, most complete set of user-provided data.
 - **Subdirectory support:** Frontend auto-detects base path for API calls, supporting both root and subdirectory deployments (e.g., GitHub Pages).
+- **Robust user message deduplication:** Only one user bubble appears per utterance, even with backend replays or system echoes. Deduplication logic prevents all duplicate/near-duplicate user messages.
 
 **What's left:**
 - Further UI/UX polish and accessibility

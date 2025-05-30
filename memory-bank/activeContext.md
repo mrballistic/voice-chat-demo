@@ -13,13 +13,24 @@
 - **Intake Extraction**: All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively. The intake panel always shows the latest, most complete set of user-provided data.
 - **Subdirectory Support**: Frontend auto-detects base path for API calls, supporting both root and subdirectory deployments (e.g., GitHub Pages).
 
+### Current Focus
+- Ensuring robust deduplication of user messages in the chat UI for the real-time voice chat app.
+- Preventing duplicate or near-duplicate user bubbles from backend replays or system echoes.
+
 ### Recent Changes
+- Updated deduplication logic in `src/components/chat-interface.tsx`:
+  - User messages are only updated if a transcript with the same `item_id` arrives.
+  - No new user message is added if any prior user message is a near-duplicate (Levenshtein distance and substring checks).
+  - All user messages from `conversation.item.created` events (system echo) are ignored.
+  - Only user messages with a `timestamp` property are rendered.
 - Intake extraction now merges new fields with previous ones, so earlier info is preserved even if OpenAI omits them in later responses.
 - All user messages are concatenated and sent as the full transcript for intake extraction, ensuring cumulative context.
 - API route for intake extraction is serverless and will not work on static-only hosts (e.g., GitHub Pages).
 - UI and chat bubble logic updated for clarity and stability.
 
 ### Next Steps
+- Monitor for any remaining edge cases in user message deduplication.
+- Continue improving user experience and reliability of the chat UI.
 - Further UI/UX polish and accessibility
 - Advanced error handling and user feedback
 - (Optional) Add OpenAI TTS/voice streaming for AI replies (legacy REST)
@@ -29,6 +40,8 @@
 - **Never leak secrets to github.** Secrets include internal URLs, endpoints, and API keys. Always use environment variables for sensitive configuration.
 
 **Next Steps:**  
+- Monitor for any remaining edge cases in user message deduplication.
+- Continue improving user experience and reliability of the chat UI.
 - Further UI/UX polish and accessibility
 - Advanced error handling and user feedback
 - (Optional) Add OpenAI TTS/voice streaming for AI replies (legacy REST)

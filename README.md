@@ -19,6 +19,11 @@ A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Ta
 - 🔥 Single "Voice Chat" toggle button (orange/red), no mode switching, no WebRTC jargon
 - 🗂️ **Cumulative intake extraction:** All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively. The intake panel always shows the latest, most complete set of user-provided data.
 - 🛣️ **Subdirectory support:** Frontend auto-detects base path for API calls, supporting both root and subdirectory deployments (e.g., GitHub Pages).
+- **Robust user message deduplication**: Only one user message bubble appears per utterance, even if the backend emits multiple finalized transcripts or system echoes. The deduplication logic:
+  - Updates an existing user message if a new transcript with the same `item_id` arrives
+  - Prevents adding a new user message if any prior user message is a near-duplicate (using Levenshtein distance and substring checks)
+  - Ignores all user messages from `conversation.item.created` events (system echo)
+  - Only renders user messages with a `timestamp` property
 
 ## 🛠️ Tech Stack
 
