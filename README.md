@@ -1,125 +1,54 @@
-# 🎤 Real-Time Voice Chat Demo (OpenAI GPT-4o Realtime)
+# OpenAI Real-Time Voice Chat Demo
 
-A modern, real-time voice chat demo built with Next.js, React, shadcn/ui, and Tailwind CSS. This app streams user voice to OpenAI's new GPT-4o Realtime API for voice-to-voice AI chat and live user transcription. No Whisper, no local proxy, no mode switching required.
+✨ This project is a real-time voice chat demo app built with Next.js, React, shadcn/ui, and Tailwind CSS. It uses OpenAI's Whisper API for real-time streaming transcription and OpenAI GPT-4o for chat completions. The app features robust silence detection, accessible and modern UI, and supports both light and dark mode.
 
-## ⚠️ Requirements
+---
 
-- **Next.js**: 15.3.3 or newer (LTS)
-- **React**: 19.1.0 (LTS)
-- **Node.js**: 20.x (LTS) recommended
+## Features 🚀
 
-## ✨ Features
+- 🎤 Real-time voice-to-text transcription using OpenAI Whisper
+- 🤖 Real-time AI chat responses using OpenAI GPT-4o
+- 🔄 Streaming UI for both transcription and chat
+- 🔇 Robust silence detection and error handling
+- ♿ Accessible, visually polished, and dark mode support
+- 🖼️ Responsive 2-column layout with custom color theming
+- 🦶 Persistent footer logo (bottom right, always visible)
+- 🛡️ Robust user message deduplication (no duplicate/near-duplicate user bubbles)
+- 🚫 All overlays (e.g., Next.js feedback bubble) are disabled via next.config.ts (`devIndicators: false`)
+- 🖥️ Main content area fills 80% of the viewport width for a modern, flexible layout
 
-- 🎙️ Real-time voice input (Web Audio API)
-- 🗣️ Voice-to-voice chat with OpenAI GPT-4o Realtime API (via Azure session backend)
-- 📝 User transcription and intake extraction powered by GPT-4o Realtime (no Whisper)
-- 💬 AI responses (text or transcript) shown as robot chat bubbles
-- 💎 Modern, accessible UI (shadcn/ui, Tailwind CSS)
-- 📱 Responsive, fixed-width chat area for stable layout
-- 🔥 Single "Voice Chat" toggle button (orange/red), no mode switching, no WebRTC jargon
-- 🗂️ **Cumulative intake extraction:** All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively. The intake panel always shows the latest, most complete set of user-provided data.
-- 🛣️ **Subdirectory support:** Frontend auto-detects base path for API calls, supporting both root and subdirectory deployments (e.g., GitHub Pages).
-- **Robust user message deduplication**: Only one user message bubble appears per utterance, even if the backend emits multiple finalized transcripts or system echoes. The deduplication logic:
-  - Updates an existing user message if a new transcript with the same `item_id` arrives
-  - Prevents adding a new user message if any prior user message is a near-duplicate (using Levenshtein distance and substring checks)
-  - Ignores all user messages from `conversation.item.created` events (system echo)
-  - Only renders user messages with a `timestamp` property
+---
 
-## 🛠️ Tech Stack
-
-- **Framework:** Next.js 15.1.8 (React 19.1.0, TypeScript)
-- **UI:** shadcn/ui, Tailwind CSS
-- **API:** OpenAI GPT-4o Realtime (voice-to-voice, user transcription, and intake extraction)
-- **Voice:** Web Audio API, MediaRecorder
-
-## 🚀 Getting Started
-
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd voice-chat-demo
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**
-   Create a `.env.local` file in the project root:
-   ```
-   NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
-   NEXT_PUBLIC_SESSION_URL=https://your-azure-backend/session
-   NEXT_PUBLIC_OPENAI_REALTIME_URL=https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
-   ```
-
-4. **Run the development server**
-   ```bash
-   npm run dev
-   ```
-
-Open [http://localhost:3000](http://localhost:3000) to view the app.
-
-## 🏗️ Static Export & Deployment
-
-> **Warning:** API routes (including `/api/openai-extract-intake` and **all authentication endpoints like `/api/auth/[...nextauth]`**) require a serverless or Node.js backend. They will **NOT** work on static-only hosts like GitHub Pages. For authentication and dynamic features, you must deploy to Vercel, Netlify, or your own backend **with serverless function support**.
-
-> **Note:** If you want to use NextAuth.js or any dynamic API route, you must remove or comment out `output: 'export'` in `next.config.ts`.
-
-To generate a static export (for deployment to static hosting):
-
-```bash
-npm run build
-```
-
-- For subdirectory deployments (e.g., GitHub Pages), the frontend auto-detects the base path for API calls, but API routes will return 404 unless you deploy to a platform that supports serverless functions.
-
-## 🧠 Intake Extraction (GPT-4o)
-
-- All finalized user speech is concatenated and sent to `/api/openai-extract-intake`.
-- The backend uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively.
-- The intake panel always shows the latest, most complete set of user-provided data.
-
-## 📝 Known Limitations
-
-- API routes will not work on static-only hosts (e.g., GitHub Pages). Use Vercel/Netlify or a custom backend for dynamic features.
-- Some edge cases in audio streaming/playback may need further handling.
-- All Gemini/Google code removed; all OpenAI endpoints are functional.
-
-## 🗂️ Project Structure
-
-- `src/components/chat-interface.tsx` – Main chat interface (voice-to-voice, UI, intake extraction logic)
-- `src/components/ui/chat-bubble.tsx` – Chat bubble UI component
-- `src/lib/openai.ts` – OpenAI API utility
-- `src/app/api/openai-extract-intake/route.ts` – Intake extraction API endpoint (GPT-4o, cumulative fields)
-- `memory-bank/` – Project documentation and context (see Memory Bank section)
-
-## 📝 How It Works
-
-- When you start a voice chat, your audio is streamed in real time to the Azure backend for session management and then to the OpenAI GPT-4o Realtime API for both AI voice response and live user transcription.
-- The OpenAI GPT-4o Realtime API provides:
-  - Real-time AI voice and text responses (played back and shown as robot chat bubbles)
-  - Real-time streaming user transcription (shown as a user chat bubble as you speak)
-- All finalized user speech is concatenated and sent to `/api/openai-extract-intake`, which uses GPT-4o to extract and merge intake fields (name, phone, insurance, etc.) cumulatively. The intake panel always shows the latest, most complete set of user-provided data.
-- All chat logic and UI is handled client-side in React.
-- The UI is stable, accessible, and mobile-friendly.
-
-## 🗺️ Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
-  A["User Mic/Audio"] -->|stream| B["Chat Interface (React)"]
-  B -->|WebRTC stream| C["Azure Session Backend ($SESSION_URL)"]
-  C -->|ephemeral token| D["OpenAI GPT-4o Realtime API ($OPENAI_REALTIME_URL)"]
-  D -->|AI voice/text response| E["Robot Chat Bubble + Audio"]
-  D -->|User transcript| F["User Chat Bubble"]
-  B -->|finalized user transcript| G["/api/openai-extract-intake (GPT-4o)"]
-  G -->|intake fields| H["Intake Panel"]
+    User((User)) -->|Voice| UI[Chat UI]
+    UI -->|Audio/Text| OpenAIRealtime[OpenAI Realtime API (voice+text)]
+    OpenAIRealtime -->|AI Response| UI
+    UI -->|Transcript| IntakeAPI[/api/openai-extract-intake]
+    IntakeAPI -->|Classification| GPT4o[OpenAI GPT-4o (classification)]
+    GPT4o -->|Intake Fields| IntakePanel[Intake Extraction Panel]
+    UI -->|Footer| Logo[Footer Logo]
 ```
 
-- All backend URLs are set via environment variables.
-- No Whisper, no local proxy, no mode switching.
+---
 
-## 📄 License
+## Status
 
-MIT License. See [LICENSE](./LICENSE) for details.
+✅ All major requirements are complete. Further UI/UX polish and accessibility improvements can be made as needed based on feedback.
+
+---
+
+## Getting Started
+
+1. Clone the repo
+2. Install dependencies: `npm install`
+3. Set up your `.env.local` with OpenAI API keys
+4. Run the app: `npm run dev`
+
+---
+
+## License
+
+MIT

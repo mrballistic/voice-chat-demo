@@ -27,6 +27,7 @@
 - All user messages are concatenated and sent as the full transcript for intake extraction, ensuring cumulative context.
 - API route for intake extraction is serverless and will not work on static-only hosts (e.g., GitHub Pages).
 - UI and chat bubble logic updated for clarity and stability.
+- Removed all CSS/JS hacks for hiding the Next.js feedback bubble (bottom left). Now handled via next.config.ts (`devIndicators: false`).
 
 ### Next Steps
 - Monitor for any remaining edge cases in user message deduplication.
@@ -38,6 +39,13 @@
 
 ### Security
 - **Never leak secrets to github.** Secrets include internal URLs, endpoints, and API keys. Always use environment variables for sensitive configuration.
+
+## 2025-06-02: UI/UX and Dev Experience Update
+- All CSS/JS hacks for hiding the Next.js feedback bubble (bottom left) have been removed. This is now handled via next.config.ts (`devIndicators: false`).
+- Footer logo remains fixed at the bottom right of the browser window, unaffected by overlays.
+- Main content area fills 80% of the viewport width, is responsive, and the layout is visually polished.
+- All major requirements (robust deduplication, responsive layout, custom theming, persistent footer) are complete.
+- No major pending tasks; further fine-tuning is possible based on feedback.
 
 **Next Steps:**  
 - Monitor for any remaining edge cases in user message deduplication.

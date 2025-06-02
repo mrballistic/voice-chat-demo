@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   // assetPrefix: `/${repoName}/`,
   // If you use images or fonts, you may also want to set images.unoptimized = true
   // images: { unoptimized: true },
+   devIndicators: false
 };
 
 export default nextConfig;

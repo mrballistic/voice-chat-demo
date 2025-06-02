@@ -1,5 +1,13 @@
 # Progress
 
+## 2025-06-02: Current Progress
+- Real-time voice chat UI with OpenAI's WebRTC API and live transcription is complete.
+- Robust user message deduplication prevents duplicate/near-duplicate user bubbles.
+- Responsive 2-column layout with custom color theming and persistent footer logo.
+- Footer logo is fixed bottom right, always visible, and not overlapped by content.
+- All CSS/JS hacks for hiding the Next.js feedback bubble have been removed; handled via next.config.ts (`devIndicators: false`).
+- All major requirements are met. Further UI/UX polish and accessibility improvements are possible as needed.
+
 **What works:**
 - Real-time voice capture and silence detection
 - Real-time user transcription and intake extraction via OpenAI GPT-4o Realtime API (no Whisper)

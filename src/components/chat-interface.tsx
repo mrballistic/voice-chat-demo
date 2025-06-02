@@ -497,120 +497,125 @@ Strategically add things like:
 
   // Add avatar circle with emoji before the chat bubble
   return (
-    <div className="w-full flex justify-center bg-background">
-      <div className="flex flex-col h-[80vh] w-full sm:w-[800px] mx-auto border rounded-lg">
-        <div 
-          ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4"
-        >
-          {messages.map((message, index) => (
-            message.isUser ? (
-              message.timestamp ? (
-                <div key={index} className="flex items-start gap-2 justify-end">
+    <div className="w-full flex justify-center bg-[#002078]">
+      <div className="flex flex-col md:flex-row h-[80vh] w-full max-w-7xl mx-auto">
+        {/* Chat area (left, 2/3 on md+) */}
+        <div className="flex flex-col flex-1 md:w-2/3 border rounded-lg bg-white/10 backdrop-blur-md min-w-0">
+          <div 
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto p-4 space-y-4"
+          >
+            {messages.map((message, index) => (
+              message.isUser ? (
+                message.timestamp ? (
+                  <div key={index} className="flex items-start gap-2 justify-end">
+                    <ChatBubble 
+                      content={message.content}
+                      isUser={message.isUser}
+                    />
+                    <div
+                      className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: '#333' }}
+                    >
+                      🧔
+                    </div>
+                  </div>
+                ) : (
+                  (() => { console.warn('Skipping user message without timestamp:', message); return null; })()
+                )
+              ) : (
+                <div key={index} className="flex items-start gap-2">
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: '#333' }}
+                  >
+                    🤖
+                  </div>
                   <ChatBubble 
                     content={message.content}
                     isUser={message.isUser}
                   />
-                  <div
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ background: '#333' }}
-                  >
-                    🧔
-                  </div>
                 </div>
-              ) : (
-                (() => { console.warn('Skipping user message without timestamp:', message); return null; })()
               )
-            ) : (
-              <div key={index} className="flex items-start gap-2">
+            ))}
+            {/* Show live user transcript as a user bubble while speaking, only if not nearly identical to last user message */}
+            {liveUserTranscript && (
+              (() => {
+                // Compare to last user message
+                const lastUserMsg = messages.length > 0 && messages[messages.length - 1].isUser ? messages[messages.length - 1].content : '';
+                // Simple similarity: ignore case, trim, and check if equal or if one is a substring of the other
+                const liveNorm = liveUserTranscript.trim().toLowerCase();
+                const lastNorm = (lastUserMsg || '').trim().toLowerCase();
+                if (
+                  liveNorm &&
+                  lastNorm &&
+                  (liveNorm === lastNorm || lastNorm.includes(liveNorm) || liveNorm.includes(lastNorm))
+                ) {
+                  return null;
+                }
+                return (
+                  <div className="flex items-start gap-2 justify-end opacity-70">
+                    <ChatBubble content={liveUserTranscript} isUser={true} />
+                    <div
+                      className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: '#333' }}
+                    >
+                      🧔
+                    </div>
+                  </div>
+                );
+              })()
+            )}
+            {currentResponse && (
+              <div className="flex items-start gap-2">
                 <div
                   className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ background: '#333' }}
                 >
-                  🤖
+                  {'🤖'}
                 </div>
                 <ChatBubble 
-                  content={message.content}
-                  isUser={message.isUser}
+                  content={currentResponse}
+                  isUser={false}
                 />
               </div>
-            )
-          ))}
-          {/* Show live user transcript as a user bubble while speaking, only if not nearly identical to last user message */}
-          {liveUserTranscript && (
-            (() => {
-              // Compare to last user message
-              const lastUserMsg = messages.length > 0 && messages[messages.length - 1].isUser ? messages[messages.length - 1].content : '';
-              // Simple similarity: ignore case, trim, and check if equal or if one is a substring of the other
-              const liveNorm = liveUserTranscript.trim().toLowerCase();
-              const lastNorm = (lastUserMsg || '').trim().toLowerCase();
-              if (
-                liveNorm &&
-                lastNorm &&
-                (liveNorm === lastNorm || lastNorm.includes(liveNorm) || liveNorm.includes(lastNorm))
-              ) {
-                return null;
-              }
-              return (
-                <div className="flex items-start gap-2 justify-end opacity-70">
-                  <ChatBubble content={liveUserTranscript} isUser={true} />
-                  <div
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ background: '#333' }}
-                  >
-                    🧔
-                  </div>
-                </div>
-              );
-            })()
-          )}
-          {currentResponse && (
-            <div className="flex items-start gap-2">
-              <div
-                className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: '#333' }}
+            )}
+          </div>
+          <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
+            <div className="flex-1">
+              <Button
+                onClick={() => {
+                  if (isVoiceStreaming) {
+                    stopVoiceStreaming();
+                  } else {
+                    startVoiceStreamingWebRTC();
+                  }
+                }}
+                className={`w-full font-bold  ${isVoiceStreaming ? 'text-white bg-red-600 hover:bg-red-700' : 'text-[#002078] bg-[#1bddf0] hover:bg-[#15afbd]'}`}
+                style={{ transition: 'background 0.2s' }}
               >
-                {'🤖'}
-              </div>
-              <ChatBubble 
-                content={currentResponse}
-                isUser={false}
-              />
+                {isVoiceStreaming ? 'Stop Voice Chat' : 'Start Voice Chat'}
+              </Button>
             </div>
-          )}
+          </div>
         </div>
-        {/* Intake data summary display */}
-        <div className="border-t bg-muted p-4 text-sm">
-          <div className="font-semibold text-lg mb-2">Collected Intake Data:</div>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
-            {intake.name && <li><b>Name:</b> {intake.name}</li>}
-            {intake.phone && <li><b>Phone:</b> {intake.phone}</li>}
-            {intake.email && <li><b>Email:</b> {intake.email}</li>}
-            {intake.insurance && <li><b>Insurance:</b> {intake.insurance}</li>}
-            {intake.policy && <li><b>Policy #:</b> {intake.policy}</li>}
-            {intake.group && <li><b>Group #:</b> {intake.group}</li>}
-            {intake.workersComp && <li><b>Workers Comp:</b> {intake.workersComp}</li>}
-            {intake.injuryHow && <li><b>How Injury Occurred:</b> {intake.injuryHow}</li>}
-            {intake.injuryDate && <li><b>Date of Injury:</b> {intake.injuryDate}</li>}
-            {intake.symptoms && <li><b>Symptoms:</b> {intake.symptoms}</li>}
-            {intake.priorTreatment && <li><b>Prior Treatment:</b> {intake.priorTreatment}</li>}
-          </ul>
-        </div>
-        <div className="border-t p-4 flex flex-col sm:flex-row gap-2 w-full">
-          <div className="flex-1">
-            <Button
-              onClick={() => {
-                if (isVoiceStreaming) {
-                  stopVoiceStreaming();
-                } else {
-                  startVoiceStreamingWebRTC();
-                }
-              }}
-              className={`w-full font-bold text-white ${isVoiceStreaming ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500 hover:bg-orange-600'}`}
-              style={{ transition: 'background 0.2s' }}
-            >
-              {isVoiceStreaming ? 'Stop Voice Chat' : 'Start Voice Chat'}
-            </Button>
+        {/* Intake data summary (right, 1/3 on md+, below on small screens) */}
+        <div className="w-full md:w-1/3 pl-0 md:pl-6 mt-6 md:mt-0">
+          <div className="border rounded-lg bg-white/5 backdrop-blur-md p-4 text-sm h-full flex flex-col items-center justify-center">
+            <div className="font-semibold text-lg mb-2 text-white text-center">Intake Data:</div>
+            <ul className="grid grid-cols-1 gap-y-1 text-white text-center">
+              {intake.name && <li><b>Name:</b> {intake.name}</li>}
+              {intake.phone && <li><b>Phone:</b> {intake.phone}</li>}
+              {intake.email && <li><b>Email:</b> {intake.email}</li>}
+              {intake.insurance && <li><b>Insurance:</b> {intake.insurance}</li>}
+              {intake.policy && <li><b>Policy #:</b> {intake.policy}</li>}
+              {intake.group && <li><b>Group #:</b> {intake.group}</li>}
+              {intake.workersComp && <li><b>Workers Comp:</b> {intake.workersComp}</li>}
+              {intake.injuryHow && <li><b>How Injury Occurred:</b> {intake.injuryHow}</li>}
+              {intake.injuryDate && <li><b>Date of Injury:</b> {intake.injuryDate}</li>}
+              {intake.symptoms && <li><b>Symptoms:</b> {intake.symptoms}</li>}
+              {intake.priorTreatment && <li><b>Prior Treatment:</b> {intake.priorTreatment}</li>}
+            </ul>
           </div>
         </div>
       </div>
