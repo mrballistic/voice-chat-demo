@@ -698,7 +698,7 @@ If they decline entirely, reassure them someone will follow up.
                     startVoiceStreamingWebRTC();
                   }
                 }}
-                className={`w-full font-bold  ${isVoiceStreaming ? 'text-white bg-red-600 hover:bg-red-700' : 'text-[#002078] bg-[#1bddf0] hover:bg-[#15afbd]'}`}
+                className={`w-full font-bold  ${isVoiceStreaming ? 'text-white bg-[#ff4455] hover:bg-[#ff1226]' : 'text-[#002078] bg-[#1bddf0] hover:bg-[#15afbd]'}`}
                 style={{ transition: 'background 0.2s' }}
               >
                 {isVoiceStreaming ? 'Stop Voice Chat' : 'Start Voice Chat'}
