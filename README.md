@@ -16,6 +16,7 @@
 - 🛡️ Robust user message deduplication (no duplicate/near-duplicate user bubbles)
 - 🚫 All overlays (e.g., Next.js feedback bubble) are disabled via next.config.ts (`devIndicators: false`)
 - 🖥️ Main content area fills 80% of the viewport width for a modern, flexible layout
+- 🗓️ Google Calendar integration for real appointment scheduling (OAuth 2.0, with token refresh)
 
 ---
 
@@ -30,6 +31,8 @@ flowchart TD
     IntakeAPI -->|Classification| GPT4o["OpenAI GPT-4o: classification"]
     GPT4o -->|Intake Fields| IntakePanel["Intake Extraction Panel"]
     UI -->|Footer| Logo["Footer Logo"]
+    UI -->|Calendar| GoogleCal["Google Calendar API (OAuth)"]
+    GoogleCal -->|Slots| UI
 ```
 
 ---

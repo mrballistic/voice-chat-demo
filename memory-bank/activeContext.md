@@ -1,12 +1,13 @@
 # Active Context
 
-## Active Context (as of 2025-05-27)
+## Active Context (as of 2025-06-03)
 
 ### Current Architecture
 - **Voice Chat**: Uses Azure backend for session management and OpenAI Realtime API for voice-to-voice streaming.
 - **User Transcription**: User audio is buffered locally and sent to OpenAI Whisper via `/api/openai-transcribe` as soon as the user finishes speaking. The transcript is displayed as a user chat bubble.
 - **AI Response**: AI replies (text or transcript) are displayed as robot chat bubbles, only from `response.output_item.done` messages.
 - **Configurable Endpoints**: Both the Azure session endpoint and the OpenAI Realtime API endpoint are set via environment variables (`NEXT_PUBLIC_SESSION_URL` and `NEXT_PUBLIC_OPENAI_REALTIME_URL`), not hardcoded.
+- **Google Calendar Integration**: The app integrates with Google Calendar via OAuth 2.0. Access tokens are refreshed server-side using refresh tokens, so users do not need to re-authenticate every hour. The backend handles token expiry and prompts for re-authentication only if the refresh token is invalid or missing.
 - **UI**: Single "Voice Chat" toggle button (orange/red), fixed-width chat area, no mode switching, no WebRTC terminology, no "Press to Talk" button.
 - **Removed**: All local proxy scripts and the `/api/openai-realtime` route.
 - **No Duplicates**: Only one user and one AI bubble per turn.
@@ -16,6 +17,7 @@
 ### Current Focus
 - Ensuring robust deduplication of user messages in the chat UI for the real-time voice chat app.
 - Preventing duplicate or near-duplicate user bubbles from backend replays or system echoes.
+- Maintaining seamless Google Calendar integration and authentication for appointment scheduling.
 
 ### Recent Changes
 - Updated deduplication logic in `src/components/chat-interface.tsx`:
@@ -25,6 +27,7 @@
   - Only user messages with a `timestamp` property are rendered.
 - Intake extraction now merges new fields with previous ones, so earlier info is preserved even if OpenAI omits them in later responses.
 - All user messages are concatenated and sent as the full transcript for intake extraction, ensuring cumulative context.
+- **Google Calendar integration via OAuth 2.0**: Backend now uses refresh tokens to maintain access, and the frontend displays a clear banner and sign-in button if authentication is required. No more hourly re-auth prompts for users.
 - API route for intake extraction is serverless and will not work on static-only hosts (e.g., GitHub Pages).
 - UI and chat bubble logic updated for clarity and stability.
 - Removed all CSS/JS hacks for hiding the Next.js feedback bubble (bottom left). Now handled via next.config.ts (`devIndicators: false`).
@@ -44,7 +47,7 @@
 - All CSS/JS hacks for hiding the Next.js feedback bubble (bottom left) have been removed. This is now handled via next.config.ts (`devIndicators: false`).
 - Footer logo remains fixed at the bottom right of the browser window, unaffected by overlays.
 - Main content area fills 80% of the viewport width, is responsive, and the layout is visually polished.
-- All major requirements (robust deduplication, responsive layout, custom theming, persistent footer) are complete.
+- All major requirements (robust deduplication, responsive layout, custom theming, persistent footer, Google Calendar OAuth integration) are complete.
 - No major pending tasks; further fine-tuning is possible based on feedback.
 
 **Next Steps:**  
