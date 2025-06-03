@@ -522,8 +522,53 @@ If they decline entirely, reassure them someone will follow up.
     }
   }
 
+  // --- New: Google Calendar Auth State ---
+  const [calendarAuthStatus, setCalendarAuthStatus] = useState<'ok' | 'auth-required' | 'error' | 'not-modified' | null>(null);
+  const [calendarAuthRedirectUrl, setCalendarAuthRedirectUrl] = useState<string | null>(null);
 
- 
+  // On mount, test Google Calendar API token and trigger auth if needed
+  useEffect(() => {
+    async function checkGoogleCalendarAuth() {
+      let basePath = '';
+      if (typeof window !== 'undefined') {
+        basePath = window.location.pathname.startsWith('/voice-chat-demo') ? '/voice-chat-demo' : '';
+      } else if (process.env.NEXT_PUBLIC_BASE_PATH) {
+        basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+      }
+      const apiUrl = `${basePath}/api/calendar/first-available`;
+      try {
+        const resp = await fetch(apiUrl, { credentials: 'include' });
+        if (resp.status === 401) {
+          let signinUrl = null;
+          try {
+            const data = await resp.json();
+            signinUrl = data.signinUrl || null;
+          } catch {}
+          setCalendarAuthStatus('auth-required');
+          setCalendarAuthRedirectUrl(signinUrl);
+          return;
+        }
+        if (resp.status === 304) {
+          setCalendarAuthStatus('not-modified');
+          setCalendarAuthRedirectUrl(null);
+          return;
+        }
+        if (!resp.ok) {
+          setCalendarAuthStatus('error');
+          setCalendarAuthRedirectUrl(null);
+          return;
+        }
+        setCalendarAuthStatus('ok');
+        setCalendarAuthRedirectUrl(null);
+      } catch (err) {
+        setCalendarAuthStatus('auth-required');
+        setCalendarAuthRedirectUrl(null);
+        console.warn('Google Calendar auth check error (treated as auth required):', err);
+      }
+    }
+    checkGoogleCalendarAuth();
+  }, []);
+
   // Only run if the last message is a new user message
   useEffect(() => {
     if (messages.length === 0) return;
@@ -539,6 +584,32 @@ If they decline entirely, reassure them someone will follow up.
   return (
     <div className="w-full flex justify-center bg-[#002078]">
       <div className="flex flex-col md:flex-row h-[80vh] w-full max-w-7xl mx-auto">
+        {/* --- New: Google Calendar Auth Banner --- */}
+        {calendarAuthStatus === 'auth-required' && (
+          <div className="w-full bg-yellow-400 text-black text-center py-2 px-4 font-semibold z-50">
+            Google Calendar authentication required.{' '}
+            {calendarAuthRedirectUrl ? (
+              <button
+                className="underline font-bold hover:text-blue-700 ml-2"
+                onClick={() => window.location.href = calendarAuthRedirectUrl}
+              >
+                Click here to sign in
+              </button>
+            ) : (
+              <span>No redirect URL provided.</span>
+            )}
+          </div>
+        )}
+        {calendarAuthStatus === 'not-modified' && (
+          <div className="w-full bg-yellow-300 text-black text-center py-2 px-4 font-semibold z-50">
+            Google Calendar authentication may be stale or cached. Please refresh or re-authenticate.
+          </div>
+        )}
+        {calendarAuthStatus === 'error' && (
+          <div className="w-full bg-red-500 text-white text-center py-2 px-4 font-semibold z-50">
+            Google Calendar API error. Please try again later.
+          </div>
+        )}
         {/* Chat area (left, 2/3 on md+) */}
         <div className="flex flex-col flex-1 md:w-2/3 border rounded-lg bg-black/20 backdrop-blur-md min-w-0">
           <div 

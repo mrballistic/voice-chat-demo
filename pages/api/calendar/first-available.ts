@@ -32,9 +32,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const token = await getToken({ req });
   console.log('Google access token:', token?.accessToken);
   if (!token?.accessToken) {
-    // If not authenticated, trigger re-authentication by redirecting to sign-in
-    res.setHeader('Location', '/api/auth/signin');
-    return res.status(307).end();
+    // Instead of redirect, return JSON with signinUrl for API clients
+    return res.status(401).json({ error: 'Authentication required. Please sign in again.', signinUrl: '/api/auth/signin' });
   }
   const calendar = getCalendarClient(token.accessToken as string);
   const now = new Date();
@@ -57,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (result && typeof result.data === 'string') {
       const dataStr = result.data as string;
       if (dataStr.trim().startsWith('<!DOCTYPE')) {
-        return res.status(401).json({ error: 'Authentication required. Please sign in again.' });
+        return res.status(401).json({ error: 'Authentication required. Please sign in again.', signinUrl: '/api/auth/signin' });
       }
     }
     const busyPeriods = result.data.calendars?.[DEFAULT_CALENDAR_ID]?.busy ?? [];
@@ -77,8 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Try to detect 401/invalid credentials and force sign-in
     const errObj = error as { code?: number; response?: { status?: number }; message?: string };
     if (errObj?.code === 401 || errObj?.response?.status === 401) {
-      res.setHeader('Location', '/api/auth/signin');
-      return res.status(307).json({ error: 'Invalid credentials. Please sign in again.' });
+      return res.status(401).json({ error: 'Invalid credentials. Please sign in again.', signinUrl: '/api/auth/signin' });
     }
     console.error('Google Calendar API error:', error);
     res.status(500).json({ error: "Failed to fetch calendar availability", details: String(error) });
