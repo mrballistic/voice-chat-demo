@@ -23,13 +23,13 @@
 
 ```mermaid
 flowchart TD
-    User((User)) -->|Voice| UI[Chat UI]
-    UI -->|Audio/Text| OpenAIRealtime[OpenAI Realtime API (voice+text)]
+    User((User)) -->|Voice| UI["Chat UI"]
+    UI -->|Audio/Text| OpenAIRealtime["OpenAI Realtime API: voice+text"]
     OpenAIRealtime -->|AI Response| UI
-    UI -->|Transcript| IntakeAPI[/api/openai-extract-intake]
-    IntakeAPI -->|Classification| GPT4o[OpenAI GPT-4o (classification)]
-    GPT4o -->|Intake Fields| IntakePanel[Intake Extraction Panel]
-    UI -->|Footer| Logo[Footer Logo]
+    UI -->|Transcript| IntakeAPI["/api/openai-extract-intake"]
+    IntakeAPI -->|Classification| GPT4o["OpenAI GPT-4o: classification"]
+    GPT4o -->|Intake Fields| IntakePanel["Intake Extraction Panel"]
+    UI -->|Footer| Logo["Footer Logo"]
 ```
 
 ---
