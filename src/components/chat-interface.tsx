@@ -497,6 +497,10 @@ If they decline entirely, reassure them someone will follow up.
             output: JSON.stringify(outputObj)
           }
         }));
+        // Immediately prompt the model to respond to the tool result
+        dataChannel.send(JSON.stringify({
+          type: 'response.create'
+        }));
       } else {
         console.warn('[offerFirstAvailableAppointment] DataChannel not open when sending function_call_output. State:', dataChannel?.readyState);
       }
