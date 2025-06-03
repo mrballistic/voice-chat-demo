@@ -142,6 +142,7 @@ export function ChatInterface() {
             }
           }
         }));
+        console.log('[DataChannel] Sent session.update with tools:', tools);
         dataChannel.send(JSON.stringify({
           type: "conversation.item.create",
           previous_item_id: null,
@@ -160,7 +161,10 @@ export function ChatInterface() {
             id: "sys_" + Date.now(),
             type: "message",
             role: "system",
-            content: [{ type: "input_text", text: 
+            content: [
+              {
+                type: "input_text",
+                text:
 `You are a warm, professional, and conversational **medical intake specialist** named **Keighlee**, answering an inbound call to **Dr. Forrester's orthopedic office**. The caller is likely a new patient referred for a **sprained ankle**, but you don't know that yet.
 
 You're Keighlee — friendly, efficient, and a little conversational. Speak at a natural pace — not too slow. Use casual phrasing, like 'alrighty' or 'got it,' and keep things moving.
@@ -187,46 +191,46 @@ Strategically add things like:
 “Oof, gotcha…”
 “Alrighty, hang on one sec…”
 
+Once the caller explains they're a new patient or were referred for an ankle injury, smoothly transition into the **intake process**:
 
-  Once the caller explains they're a new patient or were referred for an ankle injury, smoothly transition into the **intake process**:
+“Got it—I'm happy to help you get started. I'll just need to grab a few quick details to get you set up in our system.”
 
-  “Got it—I'm happy to help you get started. I'll just need to grab a few quick details to get you set up in our system.”
+Collect the following information, asking **one question at a time**, and internally tagging each answer for structured output:
 
-  Collect the following information, asking **one question at a time**, and internally tagging each answer for structured output:
+1. **Full name**
+2. **Phone number**
+3. **Optional email address**
+4. **Insurance provider name**
+5. **Policy number**
+6. **Group number**
+7. **Is this a workers' compensation case?** (yes/no) -- if yes, note that there will be no copay needed
+8. **How the injury occurred**
+9. **Date of injury**
+10. **Current symptoms** (pain, swelling, mobility, etc.)
+11. **Any prior treatment** (e.g., urgent care, X-rays, medications)
 
-  1. **Full name**
-  2. **Phone number**
-  3. **Optional email address**
-  4. **Insurance provider name**
-  5. **Policy number**
-  6. **Group number**
-  7. **Is this a workers' compensation case?** (yes/no) -- if yes, note that there will be no copay needed
-  8. **How the injury occurred**
-  9. **Date of injury**
-  10. **Current symptoms** (pain, swelling, mobility, etc.)
-  11. **Any prior treatment** (e.g., urgent care, X-rays, medications)
+**When it is time to offer an appointment, **YOU MUST** use the 'find_first_available_appointment' tool to get the real first available slot from the calendar. Do not guess or invent a time. Wait for the tool result and then offer that slot to the caller. If it takes more than 1 second to get a result, feel free to note that the computer is a bit slow today.**
 
-  After collecting that information, offer an **appointment with a PA** using the find_first_available_appointment tool:
+If the patient requests to see **Dr. Forrester instead**, gently redirect:
+“Dr. Forrester is currently booking about a month out or more, but our PAs are fantastic. And if anything needs escalation, the PA will bring Dr. Forrester in directly.”
 
-    “Okay, we can get you in with one of our excellent PAs in about two weeks. They're trained in orthopedic injuries and can evaluate and treat ankle sprains right away.”
+Encourage them to see the PA so care isn't delayed. If they agree, suggest a placeholder appointment (e.g., “How does Wednesday at 10:30 AM sound?”).
 
-  If the patient requests to see **Dr. Forrester instead**, gently redirect:
-  “Dr. Forrester is currently booking about a month out or more, but our PAs are fantastic. And if anything needs escalation, the PA will bring Dr. Forrester in directly.”
+If they decline entirely, reassure them someone will follow up.
 
-  Encourage them to see the PA so care isn't delayed. If they agree, suggest a placeholder appointment (e.g., “How does Wednesday at 10:30 AM sound?”).
+**End the call** warmly:
 
-  If they decline entirely, reassure them someone will follow up.
-
-  **End the call** warmly:
-
-  “Great, you're all set. Someone will follow up with a reminder and any forms you'll need before the visit. Hope you start feeling better soon!”
-          ` }]
+“Great, you're all set. Someone will follow up with a reminder and any forms you'll need before the visit. Hope you start feeling better soon!”`
+              }
+            ]
           }
         }));
-
+        console.log('[DataChannel] Sent system prompt.');
         console.log('DataChannel open and voice-to-voice session started');
       };
       dataChannel.onmessage = (event) => {
+        // Log every message for debugging
+        console.log('[DataChannel] Received message:', event.data);
         try {
           const msg = JSON.parse(event.data);
 
@@ -308,9 +312,19 @@ Strategically add things like:
             return;
           }
 
-          // Tool call: find_first_available_appointment
-          if (msg.type === 'function.call' && msg.name === 'find_first_available_appointment') {
-            offerFirstAvailableAppointment();
+          // Tool call: find_first_available_appointment (support OpenAI function_call item format)
+          if (
+            msg.item &&
+            msg.item.type === 'function_call' &&
+            msg.item.name === 'find_first_available_appointment' &&
+            msg.item.status === 'in_progress'
+          ) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+              console.log('[DataChannel] Detected function_call item for find_first_available_appointment:', msg);
+              offerFirstAvailableAppointment({ functionCallItem: msg.item as FunctionCallItem, dataChannel });
+            } else {
+              console.warn('[DataChannel] No dataChannel available or not open for function_call result. State:', dataChannel?.readyState);
+            }
             return;
           }
 
@@ -348,7 +362,7 @@ Strategically add things like:
           }
         } catch {
           // Non-JSON DataChannel message
-          console.log('Non-JSON DataChannel message:', event.data);
+          console.log('[DataChannel] Non-JSON message:', event.data);
         }
       };
 
@@ -439,8 +453,17 @@ Strategically add things like:
     }
   }
 
+  // Define a minimal type for functionCallItem
+  interface FunctionCallItem {
+    call_id: string;
+    name: string;
+    [key: string]: unknown;
+  }
+
   // Helper: Find and offer the first available appointment slot after chat ends
-  async function offerFirstAvailableAppointment() {
+  // Now: Accepts a functionCallItem and dataChannel, sends result to agent
+  async function offerFirstAvailableAppointment({ functionCallItem, dataChannel }: { functionCallItem: FunctionCallItem, dataChannel: RTCDataChannel }) {
+    console.log('[offerFirstAvailableAppointment] Called with functionCallItem:', functionCallItem);
     try {
       let basePath = '';
       if (typeof window !== 'undefined') {
@@ -450,40 +473,53 @@ Strategically add things like:
       }
       const apiUrl = `${basePath}/api/calendar/first-available`;
       const resp = await fetch(apiUrl, { credentials: 'include' });
+      console.log('[offerFirstAvailableAppointment] Fetched:', resp);
+      let outputObj;
       if (!resp.ok) {
-        setMessages(prev => [...prev, { content: 'Sorry, I could not find any open appointment slots.', isUser: false }]);
-        return;
+        outputObj = { error: 'No open appointment slots found.' };
+      } else {
+        const data = await resp.json();
+        console.log('[offerFirstAvailableAppointment] Data:', data);
+        if (data.slot && data.slot.start && data.slot.end) {
+          outputObj = { slot: { start: data.slot.start, end: data.slot.end } };
+        } else {
+          outputObj = { error: 'No open appointment slots found.' };
+        }
       }
-      const data = await resp.json();
-      if (data.slot) {
-        const start = new Date(data.slot.start);
-        setMessages(prev => [
-          ...prev,
-          {
-            content: `Great! The first available appointment is on ${start.toLocaleDateString()} at ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Would you like to book this slot?`,
-            isUser: false
+      // Send function_call_output item to agent (only if DataChannel is open)
+      if (dataChannel && dataChannel.readyState === 'open' && functionCallItem && functionCallItem.call_id && functionCallItem.id) {
+        dataChannel.send(JSON.stringify({
+          type: 'conversation.item.create',
+          previous_item_id: functionCallItem.id,
+          item: {
+            type: 'function_call_output',
+            call_id: functionCallItem.call_id,
+            output: JSON.stringify(outputObj)
           }
-        ]);
+        }));
+      } else {
+        console.warn('[offerFirstAvailableAppointment] DataChannel not open when sending function_call_output. State:', dataChannel?.readyState);
       }
-    } catch {
-      setMessages(prev => [...prev, { content: 'Sorry, I could not check the calendar for open times.', isUser: false }]);
+    } catch (err) {
+      console.error('[offerFirstAvailableAppointment] Error:', err);
+      if (dataChannel && dataChannel.readyState === 'open' && functionCallItem && functionCallItem.call_id && functionCallItem.id) {
+        dataChannel.send(JSON.stringify({
+          type: 'conversation.item.create',
+          previous_item_id: functionCallItem.id,
+          item: {
+            type: 'function_call_output',
+            call_id: functionCallItem.call_id,
+            output: JSON.stringify({ error: 'Error checking calendar.' })
+          }
+        }));
+      } else {
+        console.warn('[offerFirstAvailableAppointment] DataChannel not open when sending function_call_output error. State:', dataChannel?.readyState);
+      }
     }
   }
 
-  // Automatically offer appointment after intake is complete
-  useEffect(() => {
-    // Define required fields for intake completion
-    const requiredFields = [
-      'name', 'phone', 'insurance', 'policy', 'group', 'injuryHow', 'injuryDate', 'symptoms'
-    ];
-    const intakeComplete = requiredFields.every(f => intake[f as keyof typeof intake]);
-    if (intakeComplete && !messages.some(m => m.content.includes('first available appointment'))) {
-      offerFirstAvailableAppointment();
-    }
-    // Only run when intake changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intake]);
 
+ 
   // Only run if the last message is a new user message
   useEffect(() => {
     if (messages.length === 0) return;
@@ -500,7 +536,7 @@ Strategically add things like:
     <div className="w-full flex justify-center bg-[#002078]">
       <div className="flex flex-col md:flex-row h-[80vh] w-full max-w-7xl mx-auto">
         {/* Chat area (left, 2/3 on md+) */}
-        <div className="flex flex-col flex-1 md:w-2/3 border rounded-lg bg-white/10 backdrop-blur-md min-w-0">
+        <div className="flex flex-col flex-1 md:w-2/3 border rounded-lg bg-black/20 backdrop-blur-md min-w-0">
           <div 
             ref={chatContainerRef}
             className="flex-1 overflow-y-auto p-4 space-y-4"
@@ -508,14 +544,13 @@ Strategically add things like:
             {messages.map((message, index) => (
               message.isUser ? (
                 message.timestamp ? (
-                  <div key={index} className="flex items-start gap-2 justify-end">
+                  <div key={index} className="flex items-end gap-2 justify-end">
                     <ChatBubble 
                       content={message.content}
                       isUser={message.isUser}
                     />
                     <div
-                      className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                      style={{ background: '#333' }}
+                      className="flex-shrink-0 w-10 h-10 flex items-end justify-center text-3xl z-20"
                     >
                       🧔
                     </div>
@@ -524,10 +559,9 @@ Strategically add things like:
                   (() => { console.warn('Skipping user message without timestamp:', message); return null; })()
                 )
               ) : (
-                <div key={index} className="flex items-start gap-2">
+                <div key={index} className="flex items-end gap-2">
                   <div
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ background: '#333' }}
+                    className="flex-shrink-0 w-10 h-10 flex items-end justify-center text-3xl z-20"
                   >
                     🤖
                   </div>
@@ -549,7 +583,7 @@ Strategically add things like:
                 if (
                   liveNorm &&
                   lastNorm &&
-                  (liveNorm === lastNorm || lastNorm.includes(liveNorm) || liveNorm.includes(lastNorm))
+                  (liveNorm === lastNorm || lastNorm.includes(liveNorm) || liveUserTranscript.includes(lastNorm))
                 ) {
                   return null;
                 }
@@ -557,8 +591,7 @@ Strategically add things like:
                   <div className="flex items-start gap-2 justify-end opacity-70">
                     <ChatBubble content={liveUserTranscript} isUser={true} />
                     <div
-                      className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                      style={{ background: '#333' }}
+                      className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-3xl"
                     >
                       🧔
                     </div>
@@ -569,8 +602,7 @@ Strategically add things like:
             {currentResponse && (
               <div className="flex items-start gap-2">
                 <div
-                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ background: '#333' }}
+                  className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-3xl"
                 >
                   {'🤖'}
                 </div>
@@ -601,9 +633,10 @@ Strategically add things like:
         </div>
         {/* Intake data summary (right, 1/3 on md+, below on small screens) */}
         <div className="w-full md:w-1/3 pl-0 md:pl-6 mt-6 md:mt-0">
-          <div className="border rounded-lg bg-white/5 backdrop-blur-md p-4 text-sm h-full flex flex-col items-center justify-center">
-            <div className="font-semibold text-lg mb-2 text-white text-center">Intake Data:</div>
-            <ul className="grid grid-cols-1 gap-y-1 text-white text-center">
+          <div className=" rounded-lg p-4 text-sm h-full flex flex-col">
+            <div className="font-semibold text-lg mb-2 text-white text-left">Intake Data</div>
+            <div className="w-full border-b border-white/30 mb-3" style={{height: '1px'}} />
+            <ul className="grid grid-cols-1 gap-y-1 text-white text-left">
               {intake.name && <li><b>Name:</b> {intake.name}</li>}
               {intake.phone && <li><b>Phone:</b> {intake.phone}</li>}
               {intake.email && <li><b>Email:</b> {intake.email}</li>}
@@ -616,6 +649,7 @@ Strategically add things like:
               {intake.symptoms && <li><b>Symptoms:</b> {intake.symptoms}</li>}
               {intake.priorTreatment && <li><b>Prior Treatment:</b> {intake.priorTreatment}</li>}
             </ul>
+
           </div>
         </div>
       </div>

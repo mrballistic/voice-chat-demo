@@ -30,7 +30,12 @@ function findFirstOpenSlot(busy: { start: string; end: string }[], timeMin: Date
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).end();
   const token = await getToken({ req });
-  if (!token?.accessToken) return res.status(401).json({ error: "Unauthorized" });
+  console.log('Google access token:', token?.accessToken);
+  if (!token?.accessToken) {
+    // If not authenticated, trigger re-authentication by redirecting to sign-in
+    res.setHeader('Location', '/api/auth/signin');
+    return res.status(307).end();
+  }
   const calendar = getCalendarClient(token.accessToken as string);
   const now = new Date();
   const start = new Date(now);
@@ -48,6 +53,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         items: [{ id: DEFAULT_CALENDAR_ID }],
       },
     });
+    // Defensive: check for HTML response (e.g., auth redirect)
+    if (result && typeof result.data === 'string') {
+      const dataStr = result.data as string;
+      if (dataStr.trim().startsWith('<!DOCTYPE')) {
+        return res.status(401).json({ error: 'Authentication required. Please sign in again.' });
+      }
+    }
     const busyPeriods = result.data.calendars?.[DEFAULT_CALENDAR_ID]?.busy ?? [];
     const busy = busyPeriods
       .filter((b: { start?: string | null; end?: string | null }) => !!b.start && !!b.end)
@@ -62,7 +74,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(404).json({ error: "No open slots found" });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch calendar availability" });
+    // Try to detect 401/invalid credentials and force sign-in
+    const errObj = error as { code?: number; response?: { status?: number }; message?: string };
+    if (errObj?.code === 401 || errObj?.response?.status === 401) {
+      res.setHeader('Location', '/api/auth/signin');
+      return res.status(307).json({ error: 'Invalid credentials. Please sign in again.' });
+    }
+    console.error('Google Calendar API error:', error);
+    res.status(500).json({ error: "Failed to fetch calendar availability", details: String(error) });
   }
 }

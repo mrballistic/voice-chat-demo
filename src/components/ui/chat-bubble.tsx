@@ -25,27 +25,28 @@ export function ChatBubble({ content, isUser, className }: ChatBubbleProps) {
   return (
     <div
       className={cn(
-        'max-w-[80%] relative p-4 mb-2',
-        isUser
-          ? 'bg-primary text-primary-foreground ml-auto rounded-2xl'
-          : 'bg-muted mr-auto rounded-2xl',
+        'max-w-[80%] relative mb-2 flex',
+        isUser ? 'justify-end ml-auto' : 'justify-start mr-auto',
         className
       )}
       aria-live="polite"
       aria-label={isUser ? 'User message' : 'AI message'}
       role="region"
     >
-      <p className="break-words whitespace-pre-line">{content}</p>
-      {/* Custom CSS triangle tail for speech balloon, flush with edge and near top */}
-      <span
+      <div
         className={
-          'absolute ' +
+          'relative px-4 py-2 rounded-2xl text-base shadow-sm ' +
           (isUser
-            ? 'right-[-6px] top-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-l-8 border-l-primary'
-            : 'left-[-6px] top-[14px] w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-r-8 border-r-muted')
+            ? 'ios-bubble-send'
+            : 'ios-bubble-receive')
         }
-        aria-hidden="true"
-      />
+        style={{
+          borderBottomRightRadius: isUser ? '0.75rem' : undefined,
+          borderBottomLeftRadius: !isUser ? '0.75rem' : undefined,
+        }}
+      >
+        <p className="break-words whitespace-pre-line leading-relaxed">{content}</p>
+      </div>
     </div>
   );
 }

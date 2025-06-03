@@ -121,3 +121,38 @@
     @apply bg-background text-foreground pt-0;
   }
 }
+
+/* iOS-style chat bubble tails (from Samuel Kraft's blog) */
+.ios-bubble-send {
+  color: white;
+  background: var(--primary);
+  align-self: flex-end;
+  position: relative;
+  border-radius: 25px 25px 0px 25px !important;
+}
+
+.ios-bubble-receive {
+  background: #002FAF;
+  color: whitesmoke;
+  align-self: flex-start;
+  position: relative;
+  border-radius: 25px 25px 25px 0px !important;
+}
+
+.left-accent-bar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 100vh;
+  /* 5 hard-edged color bands using a linear gradient */
+  background: linear-gradient(
+    to bottom,
+    #daff45 0%, #daff45 20%,
+    #bfb0ff 20%, #bfb0ff 40%,
+    #ff4455 40%, #ff4455 60%,
+    #1bddf0 60%, #1bddf0 80%,
+    #0d57fa 80%, #0d57fa 100%
+  );
+  z-index: 50;
+}
