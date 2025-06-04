@@ -133,6 +133,7 @@ export function ChatInterface() {
           type: "session.update",
           session: {
             voice: "shimmer",
+            speed: 1.1,
             tools,
             tool_choice: "auto",
             input_audio_transcription: {
